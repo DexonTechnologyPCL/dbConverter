@@ -66,3 +66,24 @@ jobs:
           asset_path: ./dist/Python_2DB.exe
           asset_name: Python_2DB.exe
           asset_content_type: application/octet-stream
+
+# Download .exe file in release
+      - name: Create destination directory
+        run: |
+          mkdir D:\testload
+          
+      - name: Download release asset
+        uses: actions/download-release-asset@v2
+        with:
+          repository: DexonTechnologyPCL/dbConverter  # Replace with the owner/repo of the release
+          tag: v1.0.0            # Replace with the tag of the release
+          asset_name: Python_2DB.exe  # Replace with the exact name of the asset file
+          output_path: D:\testload\Python_2DB.exe  # The path where the file will be saved
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Upload exe to artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Python_2DB
+          path: "D:\testload\Python_2DB.exe" 
