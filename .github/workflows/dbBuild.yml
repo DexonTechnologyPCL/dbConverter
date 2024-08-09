@@ -34,16 +34,17 @@ jobs:
         run: |
           pyinstaller --onefile Python_2DB.py
 
-      - name: Upload exe to artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Python_2DB
-          path: "**/Python_2DB.exe" 
+            
+      # - name: Upload exe to artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: Python_2DB
+      #     path: "**/Python_2DB.exe" 
           
-      - name: Get the version
-        id: get_version
-        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
-        shell: bash
+      # - name: Get the version
+      #   id: get_version
+      #   run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      #   shell: bash
         
       - name: Create Release
         id: create_release
@@ -51,8 +52,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.get_version.outputs.VERSION }}
-          release_name: Release ${{ steps.get_version.outputs.VERSION }}
+          tag_name: v1.0.0  # Adjust the tag name as needed
+          release_name: Release v1.0.0
           draft: false
           prerelease: false
 
