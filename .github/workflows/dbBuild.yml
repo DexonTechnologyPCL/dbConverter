@@ -20,13 +20,17 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.x'
+          python-version: '3.11'
       
+      - name: Install dependencies 
+        run: |
+          python -m pip install --upgrade pip
+
       - name: Install PyInstaller
         run: |
           pip install pyinstaller
@@ -34,3 +38,9 @@ jobs:
       - name: Compile the Script
         run: |
           pyinstaller --onefile Python_2DB.py
+
+      - name: Upload exe to artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: Python_2DB
+          path: "**/Python_2DB.exe" 
