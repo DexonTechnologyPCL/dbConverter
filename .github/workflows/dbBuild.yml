@@ -42,7 +42,7 @@ jobs:
           pyinstaller --onefile Python_2DB.py
 
       - name: Upload exe to artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Python_2DB
           path: "**/Python_2DB.exe" 
