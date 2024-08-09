@@ -14,12 +14,12 @@ env:
   OPENCV_DIR: C:\tools\opencv\build\x64\vc14 
   VTK_DIR: C:\VTKLib
 
-  
+
 jobs:
   build-and-test:
     runs-on: windows-latest
 
-  steps:
+    steps:
       - uses: actions/checkout@v2
       
       - name: Set up Python
@@ -31,6 +31,6 @@ jobs:
         run: |
           pip install pyinstaller
 
-    - name: Compile the Script
+      - name: Compile the Script
         run: |
           pyinstaller --onefile Python_2DB.py
