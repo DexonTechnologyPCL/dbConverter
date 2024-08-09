@@ -35,6 +35,7 @@ jobs:
           pip install pyinstaller
           pip install pandas
           pip install numpy
+          pip install openpyxl
 
       - name: Compile the Script
         run: |
