@@ -7,13 +7,6 @@ permissions:
   contents: write
   discussions: write
 
-env:
-  # Path to the solution file relative to the root of the project.
-  SOLUTION_FILE_PATH: ./DaconInspectionStudio/DaconInspectionStudio.sln
-  OPENCV_DIR: C:\tools\opencv\build\x64\vc14 
-  VTK_DIR: C:\VTKLib
-
-
 jobs:
   build-and-test:
     runs-on: windows-latest
