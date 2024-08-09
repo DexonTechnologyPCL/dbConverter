@@ -69,21 +69,22 @@ jobs:
 
 # Download .exe file in release
       - name: Create destination directory
-        run: |
-          mkdir D:\testload
-          
-      - name: Download release asset
-        uses: actions/download-release-asset@v2
+        run: mkdir D:\testload
+
+      - name: Get latest release download URL
+        id: get_release
+        uses: actions/github-script@v6
         with:
-          repository: DexonTechnologyPCL/dbConverter  # Replace with the owner/repo of the release
-          tag: v1.0.0            # Replace with the tag of the release
-          asset_name: Python_2DB.exe  # Replace with the exact name of the asset file
-          output_path: D:\testload\Python_2DB.exe  # The path where the file will be saved
+          script: |
+            const { data: releases } = await github.repos.listReleases({
+              owner: 'DexonTechnologyPCL',  // Replace with the owner of the repository
+              repo: 'dbConverter'    // Replace with the repository name
+            });
+            const asset = releases[0].assets.find(a => a.name === 'Python_2DB.exe');  // Replace with the correct asset name
+            core.setOutput('url', asset.browser_download_url);
+
+      - name: Download release asset
+        run: |
+          curl -L ${{ steps.get_release.outputs.url }} --output D:\testload\Python_2DB.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: Upload exe to artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Python_2DB
-          path: "D:\testload\Python_2DB.exe" 
