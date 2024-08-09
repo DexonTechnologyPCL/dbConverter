@@ -148,7 +148,7 @@ if __name__ == "__main__":
     #         else:
     #             print("Conversion completed with errors.")
 
-    excel_file = "D:\YPF 8in x 10km Jet Fuel Pipeline Poliducto La Matanza to Aeroplanta Ezeiza UTMC List Pipe Tally_Rev.03.xlsx"
+    excel_file = "D:\dbtest\YPF 8in x 10km Jet Fuel Pipeline Poliducto La Matanza to Aeroplanta Ezeiza UTMC List Pipe Tally_Rev.03.xlsx"
     if  excel_to_sqlite(excel_file):
         print("Conversion completed successfully.")
     else:
