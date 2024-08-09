@@ -40,29 +40,29 @@ jobs:
         run: |
           pyinstaller --onefile Python_2DB.py
 
-      # - name: Upload exe to artifact
-      #   uses: actions/upload-artifact@v3
+      - name: Upload exe to artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: Python_2DB
+          path: "**/Python_2DB.exe" 
+
+      # - name: Create Release
+      #   id: create_release
+      #   uses: actions/create-release@v1
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       #   with:
-      #     name: Python_2DB
-      #     path: "**/Python_2DB.exe" 
+      #     tag_name: ${{ github.ref }}
+      #     release_name: Release ${{ github.ref }}
+      #     draft: false
+      #     prerelease: false
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./dist/Python_2DB.exe
-          asset_name: Python_2DB.exe
-          asset_content_type: application/octet-stream
+      # - name: Upload Release Asset
+      #   uses: actions/upload-release-asset@v1
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   with:
+      #     upload_url: ${{ steps.create_release.outputs.upload_url }}
+      #     asset_path: ./dist/Python_2DB.exe
+      #     asset_name: Python_2DB.exe
+      #     asset_content_type: application/octet-stream
