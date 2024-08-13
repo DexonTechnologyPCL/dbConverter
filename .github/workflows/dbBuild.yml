@@ -32,7 +32,11 @@ jobs:
           pip install pandas
           pip install numpy
           pip install openpyxl
-
+      
+      - name: Install GitHub CLI
+        run: |
+          choco install gh -y
+          
       - name: Compile the Script
         run: |
           pyinstaller --onefile Python_2DB.py
@@ -71,10 +75,6 @@ jobs:
 # Download .exe file in release
       - name: Create destination directory
         run: mkdir D:\testload
-
-      - name: Install GitHub CLI
-        run: |
-          choco install gh -y
 
       - name: Download release asset
         run: |
