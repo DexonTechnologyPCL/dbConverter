@@ -79,24 +79,24 @@ jobs:
       - name: Create destination directory
         run: mkdir D:\testload
 
+      - name: Install GitHub CLI
+        run: |
+          choco install gh -y
+
       - name: Get latest release download URL
         id: get_release
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const { data: releases } = await github.repos.listReleases({
-              owner: 'DexonTechnologyPCL',  // Replace with the owner of the repository
-              repo: 'dbConverter'    // Replace with the repository name
-            });
-            const asset = releases[0].assets.find(a => a.name === 'Python_2DB.exe');  // Replace with the correct asset name
-            core.setOutput('url', asset.browser_download_url);
-
-      - name: Download release asset
         run: |
-          curl -L ${{ steps.get_release.outputs.url }} --output D:\testload\Python_2DB.exe
+          $releaseInfo = gh release view --json assets --jq '.assets[] | select(.name=="Python_2DB.exe") | .url' --repo ${{ github.repository }}
+          echo "::set-output name=url::$releaseInfo"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Download release asset
+        run: |
+          Invoke-WebRequest -Uri ${{ steps.get_release.outputs.url }} -OutFile D:\testload\Python_2DB.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
       - name: Upload exe to artifact
         uses: actions/upload-artifact@v4
         with:
