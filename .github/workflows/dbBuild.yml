@@ -96,8 +96,8 @@ jobs:
       - name: Verify download
         run: | 
             cd D:\testload
-            |
             dir
+            
           # if (Test-Path "D:\testload\Python_2DB.exe") {
           #   Write-Output "File successfully downloaded"
           # } else {
