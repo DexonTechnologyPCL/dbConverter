@@ -83,28 +83,22 @@ jobs:
         run: |
           choco install gh -y
 
-      - name: Get latest release download URL
-        id: get_release
+      - name: Authenticate with GitHub CLI
         run: |
-          $releaseInfo = gh release view --json assets --jq '.assets[] | select(.name=="Python_2DB.exe") | .url' --repo ${{ github.repository }}
-          echo "::set-output name=url::$releaseInfo"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo ${{ secrets.GITHUB_TOKEN }} | gh auth login --with-token
 
       - name: Download release asset
         run: |
-          Invoke-WebRequest -Uri ${{ steps.get_release.outputs.url }} -OutFile D:\testload\Python_2DB.exe
-        # env:
-        #   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            gh release download --repo ${{ github.repository }} --pattern "Python_2DB.exe" --dir "D:\testload"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Check dir  D:\testload
+      - name: Verify download
         run: |
-            cd D:\testload
-            |
-            dir
+          if (Test-Path "D:\testload\Python_2DB.exe") {
+            Write-Output "File successfully downloaded"
+          } else {
+            Write-Error "File download failed"
+            exit 1
+          }
           
-      - name: Upload exe to artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Python_2DB
-          path: "D:\testload\Python_2DB.exe" 
