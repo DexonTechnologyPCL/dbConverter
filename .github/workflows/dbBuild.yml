@@ -6,7 +6,10 @@ on: [push]
 permissions:
   contents: write
   discussions: write
-
+  
+env:
+      DOWNLOAD_REPO: "DexonTechnologyPCL/dbConverter"
+      
 jobs:
   build-and-test:
     runs-on: windows-latest
@@ -83,13 +86,9 @@ jobs:
         run: |
           choco install gh -y
 
-      - name: Authenticate with GitHub CLI
-        run: |
-          echo ${{ secrets.GITHUB_TOKEN }} | gh auth login --with-token
-
       - name: Download release asset
         run: |
-            gh release download --repo ${{ github.repository }} --pattern "Python_2DB.exe" --dir "D:\testload"
+            gh release download --repo ${{ env.DOWNLOAD_REPO }} --pattern "Python_2DB.exe" --dir "D:\testload"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
