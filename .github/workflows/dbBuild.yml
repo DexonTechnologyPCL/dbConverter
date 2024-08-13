@@ -8,7 +8,7 @@ permissions:
   discussions: write
   
 env:
-      DOWNLOAD_REPO: "DexonTechnologyPCL/dbConverter"
+  DOWNLOAD_REPO: "DexonTechnologyPCL/dbConverter"
       
 jobs:
   build-and-test:
@@ -26,7 +26,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
 
-      - name: Install PyInstaller
+      - name: Install Package Python
         run: |
           pip install pyinstaller
           pip install pandas
@@ -36,18 +36,6 @@ jobs:
       - name: Compile the Script
         run: |
           pyinstaller --onefile Python_2DB.py
-
-            
-      # - name: Upload exe to artifact
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: Python_2DB
-      #     path: "**/Python_2DB.exe" 
-          
-      # - name: Get the version
-      #   id: get_version
-      #   run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
-      #   shell: bash
 
       - name: Delete existing release
         uses: dev-drprasad/delete-tag-and-release@v0.2.1
