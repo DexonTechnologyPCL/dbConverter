@@ -56,7 +56,7 @@ jobs:
         id: create_release
         shell: pwsh
         run: |
-          $output = gh release create v1.0.0 --title "Release v1.0.0" --notes "Release notes for version 1.0.0" --repo DexonTechnologyPCL/dbConverter --draft=false --prerelease=false
+          $output = gh release create v1.0.0 --title "Release v1.0.0" --notes "Release notes for version 1.0.0" --repo ${{ env.DOWNLOAD_REPO }} --draft=false --prerelease=false
           if ($output -match "https://github.com/[^/]+/[^/]+/releases/tag/[^/]+") {
             $releaseUrl = $matches[0]
             "release_url=$releaseUrl" >> $env:GITHUB_OUTPUT
@@ -70,7 +70,7 @@ jobs:
       - name: Upload Release Asset
         shell: pwsh
         run: |
-          gh release upload v1.0.0 ./dist/Python_2DB.exe --repo DexonTechnologyPCL/dbConverter --clobber
+          gh release upload v1.0.0 ./dist/Python_2DB.exe --repo ${{ env.DOWNLOAD_REPO }} --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
