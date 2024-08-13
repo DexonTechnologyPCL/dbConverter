@@ -39,7 +39,7 @@ jobs:
           
       - name: Compile the Script
         run: |
-          pyinstaller --onefile Python_2DB.py
+          pyinstaller --onefile ExcelToDB.py
 
       - name: Delete existing release
         shell: pwsh
@@ -70,7 +70,7 @@ jobs:
       - name: Upload Release Asset
         shell: pwsh
         run: |
-          gh release upload v1.0.0 ./dist/Python_2DB.exe --repo ${{ env.DOWNLOAD_REPO }} --clobber
+          gh release upload v1.0.0 ./dist/ExcelToDB.exe --repo ${{ env.DOWNLOAD_REPO }} --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -80,13 +80,13 @@ jobs:
 
       - name: Download release asset
         run: |
-            gh release download --repo ${{ env.DOWNLOAD_REPO }} --pattern "Python_2DB.exe" --dir "D:\testload"
+            gh release download --repo ${{ env.DOWNLOAD_REPO }} --pattern "ExcelToDB.exe" --dir "D:\testload"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Verify download
         run: | 
-          if (Test-Path "D:\testload\Python_2DB.exe") {
+          if (Test-Path "D:\testload\ExcelToDB.exe") {
             Write-Output "File successfully downloaded"
           } else {
             Write-Error "File download failed"
