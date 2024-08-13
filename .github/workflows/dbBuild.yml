@@ -53,8 +53,14 @@ jobs:
         id: create_release
         shell: pwsh
         run: |
-          $releaseUrl = (gh release create v1.0.0 --title "Release v1.0.0" --notes "Release notes for version 1.0.0" --repo DexonTechnologyPCL/dbConverter --draft=false --prerelease=false --json url -q ".url")
-          "release_url=$releaseUrl" >> $env:GITHUB_OUTPUT
+          $output = gh release create v1.0.0 --title "Release v1.0.0" --notes "Release notes for version 1.0.0" --repo DexonTechnologyPCL/dbConverter --draft=false --prerelease=false
+          if ($output -match "https://github.com/[^/]+/[^/]+/releases/tag/[^/]+") {
+            $releaseUrl = $matches[0]
+            "release_url=$releaseUrl" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Error "Failed to extract release URL from output"
+            exit 1
+          }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
