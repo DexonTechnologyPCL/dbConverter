@@ -94,8 +94,14 @@ jobs:
       - name: Download release asset
         run: |
           Invoke-WebRequest -Uri ${{ steps.get_release.outputs.url }} -OutFile D:\testload\Python_2DB.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # env:
+        #   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Check dir  D:\testload
+        run: |
+            cd D:\testload
+            |
+            dir
           
       - name: Upload exe to artifact
         uses: actions/upload-artifact@v4
