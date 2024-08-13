@@ -47,25 +47,26 @@ jobs:
       
       - name: Create Release
         id: create_release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          release_id=$(gh release create v1.0.0 \
+          release_url=$(gh release create v1.0.0 \
             --title "Release v1.0.0" \
             --notes "Release notes for version 1.0.0" \
             --repo ${{ github.repository }} \
-            --target ${{ github.sha }} \
             --draft=false \
-            --prerelease=false)
-          echo "release_id=${release_id}" >> $GITHUB_OUTPUT
-
-      - name: Upload Release Asset
+            --prerelease=false \
+            --json url \
+            -q ".url")
+          echo "release_url=${release_url}" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Release Asset
         run: |
-          gh release upload ${{ steps.create_release.outputs.release_id }} ./dist/Python_2DB.exe \
+          gh release upload v1.0.0 ./dist/Python_2DB.exe \
             --repo ${{ github.repository }} \
             --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 # Download .exe file in release
       - name: Create destination directory
