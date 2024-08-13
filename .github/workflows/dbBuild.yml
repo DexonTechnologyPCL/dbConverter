@@ -45,7 +45,15 @@ jobs:
       #   id: get_version
       #   run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
       #   shell: bash
-        
+
+      - name: Delete existing release
+        uses: dev-drprasad/delete-tag-and-release@v0.2.1
+        with:
+          tag_name: v1.0.0  # Use the same tag name as in the Create Release step
+          delete_release: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -88,3 +96,9 @@ jobs:
           curl -L ${{ steps.get_release.outputs.url }} --output D:\testload\Python_2DB.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload exe to artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Python_2DB
+          path: "D:\testload\Python_2DB.exe" 
