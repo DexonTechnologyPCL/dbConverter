@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       
@@ -42,7 +42,7 @@ jobs:
           pyinstaller --onefile Python_2DB.py
 
       - name: Delete existing release
-        uses: dev-drprasad/delete-tag-and-release@v0.2.1
+        uses: dev-drprasad/delete-tag-and-release@v1
         with:
           tag_name: v1.0.0  # Use the same tag name as in the Create Release step
           delete_release: true
