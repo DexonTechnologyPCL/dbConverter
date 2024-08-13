@@ -42,10 +42,13 @@ jobs:
           pyinstaller --onefile Python_2DB.py
 
       - name: Delete existing release
-        uses: dev-drprasad/delete-tag-and-release@v0.2.1
-        with:
-          tag_name: v1.0.0  # Use the same tag name as in the Create Release step
-          delete_release: true
+        shell: pwsh
+        run: |
+          $tag = "v1.0.0"
+          gh release delete $tag --yes --repo ${{ github.repository }} 2>&1 | Out-Null
+          git push --delete origin $tag 2>&1 | Out-Null
+          Write-Output "Deleted existing release and tag: $tag"
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
