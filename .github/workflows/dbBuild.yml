@@ -53,24 +53,15 @@ jobs:
         id: create_release
         shell: pwsh
         run: |
-          release_url=$(gh release create v1.0.0 \
-            --title "Release v1.0.0" \
-            --notes "Release notes for version 1.0.0" \
-            --repo ${{ github.repository }} \
-            --draft=false \
-            --prerelease=false \
-            --json url \
-            -q ".url")
-          echo "release_url=${release_url}" >> $GITHUB_OUTPUT
+          $releaseUrl = (gh release create v1.0.0 --title "Release v1.0.0" --notes "Release notes for version 1.0.0" --repo DexonTechnologyPCL/dbConverter --draft=false --prerelease=false --json url -q ".url")
+          "release_url=$releaseUrl" >> $env:GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Release Asset
         shell: pwsh
         run: |
-          gh release upload v1.0.0 ./dist/Python_2DB.exe \
-            --repo ${{ github.repository }} \
-            --clobber
+          gh release upload v1.0.0 ./dist/Python_2DB.exe --repo DexonTechnologyPCL/dbConverter --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
