@@ -4,14 +4,17 @@ import sqlite3
 import sys
 import os
 import re
+import openpyxl
 
 def set_specific_headers(df):
     """Set specific columns as headers for the DataFrame."""
     df = df.copy()  # Ensure we are working on a copy of the DataFrame
 
     headers = df.iloc[1].tolist()       # Create a list for new headers
+    header_count = len(headers)
+    
     headers[0] = "Log distance [m]"     # Set specific headers for columns 0 and 25
-    headers[25] = "Comments"
+    headers[header_count-1] = "Comments"
     headers = pd.Series(headers).fillna("Unnamed")
     
     # Ensure all headers are strings and unique
@@ -26,6 +29,7 @@ def set_specific_headers(df):
     df.columns = unique_headers
     df = df.drop([0, 1]).reset_index(drop=True)  # Drop the first two rows after setting headers and reset index
     return df
+
 
 def custom_round(x):
     """Custom rounding function: round down at 0.49 and up at 0.5."""
@@ -58,40 +62,50 @@ def custom_round_two_decimal(x):
 
 def convert_data_types(df):
     """Convert data types of specific columns."""
-    df["Log distance [m]"] = pd.to_numeric(df["Log distance [m]"], errors='coerce').round(3)
-    
-    # Convert specific columns to numeric and round decimal 
-    columns_three_decimal = [
-        "Altitude [m]", "Joint / component length [m]", 
-        "Abs. Dist. to upstream weld [m]", "Remaining thickness [mm]"
-    ]
+ 
+    if "Log distance [m]" in df.columns:
+        df["Log distance [m]"] = pd.to_numeric(df["Log distance [m]"], errors='coerce').round(3)
+   
+    # List of columns to process for three decimal places
+    columns_three_decimal = ["Altitude [m]", "Joint / component length [m]", "Abs. Dist. to upstream weld [m]", "Remaining thickness [mm]"]
+   
     for col in columns_three_decimal:
-        df[col] = pd.to_numeric(df[col], errors='coerce').round(3).apply(lambda x: f"{x:.3f}" if pd.notnull(x) else None)
-
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').round(3).apply(lambda x: f"{x:.3f}" if pd.notnull(x) else None)
+ 
     columns_two_decimal = ["Nominal Internal diameter [mm]", "Max. depth [mm]"]
+   
     for col in columns_two_decimal:
-         df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round_two_decimal).apply(lambda x: f"{x:.2f}" if pd.notnull(x) else None)
-
-    # Special handling for Max. depth [%]
-    df["Max. depth [%]"] = df["Max. depth [%]"].apply(custom_round_max_depth)
-
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round_two_decimal).apply(lambda x: f"{x:.2f}" if pd.notnull(x) else None)
+ 
+    if "Max. depth [%]" in df.columns:
+        df["Max. depth [%]"] = df["Max. depth [%]"].apply(custom_round_max_depth)
+ 
+    # List of numeric columns to round
     numeric_columns_to_round = ["Length [mm]", "Width [mm]"]
     for col in numeric_columns_to_round:
-        df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round).apply(lambda x: str(int(x)) if pd.notnull(x) else None)
-
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round).apply(lambda x: str(int(x)) if pd.notnull(x) else None)
+ 
     for col in df.columns:
         if col not in ["Log distance [m]"] + columns_three_decimal + columns_two_decimal + numeric_columns_to_round + ["Max. depth [%]"]:
             df[col] = df[col].astype(str).replace({'nan': None, 'None': None, '': None}).where(pd.notnull(df[col]), None)
-
+ 
     return df
 
 def add_erf_type(df):
     """Add ERF flag based on ERF column."""
     if 'ERF (Modified)' in df.columns and 'ERF (metal loss)' in df.columns:
+        #It finds the position of 'ERF (Modified)' column.
         position = df.columns.get_loc('ERF (Modified)')
+        #Creates a new 'ERF' column, using 'ERF (Modified)' values if they're not null, otherwise using 'ERF (metal loss)' values.
         df['ERF'] = df.apply(lambda row: row['ERF (Modified)'] if pd.notnull(row['ERF (Modified)']) else row['ERF (metal loss)'], axis=1)
+        #Inserts the new 'ERF' column at the position of 'ERF (Modified)'.
         df.insert(position, 'ERF', df.pop('ERF'))
+        #Creates an 'isNormalERF' column, which is True where 'ERF (metal loss)' is not null.
         df['isNormalERF'] = df['ERF (metal loss)'].notnull()
+        #Drops the original 'ERF (Modified)' and 'ERF (metal loss)' columns.
         df = df.drop(columns=['ERF (Modified)', 'ERF (metal loss)'])
     elif 'ERF (Modified)' in df.columns:
         position = df.columns.get_loc('ERF (Modified)')
@@ -105,10 +119,20 @@ def add_erf_type(df):
         df.insert(position, 'ERF', df.pop('ERF'))
         df['isNormalERF'] = True
         df = df.drop(columns=['ERF (metal loss)'])
+    else:
+        df['isNormalERF'] = True
     return df
 
 def excel_to_sqlite(excel_file):
     # Check if the Excel file exists
+    headfile = "D:\dbtest\header.xlsx"
+    xls = pd.ExcelFile(headfile)
+    for sheet_name in xls.sheet_names:
+        dfheader = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+        # dfheader = pd.read_excel(headfile)
+           
+        GetHeaderColumn(dfheader)
+    
     if not os.path.exists(excel_file):
         print(f"Error: The file {excel_file} does not exist.")
         return False
@@ -119,16 +143,27 @@ def excel_to_sqlite(excel_file):
     
     # Read the Excel file
     xls = pd.ExcelFile(excel_file)
-    
     # Loop through each sheet in the Excel file
     for sheet_name in xls.sheet_names:
         df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
-
+     
         # Set specific columns as headers
         df = set_specific_headers(df)
-        df = convert_data_types(df)
+ 
+        # if (sheet_name == "List of Pipe Tally") :
         df = add_erf_type(df) # Add the ERF flag
         df = df.drop(columns=['isNormalERF'])  # Drop the isNormalERF column before saving
+        
+        missing_in_df, _ = compare_arrays_with_alert(dfheader.columns, df.columns)
+        # Add missing columns to df
+        for col in missing_in_df:
+            df[col] = None  # Add column with None values
+                
+            # Reorder columns to match dfheader
+        df = df.reindex(columns=dfheader.columns)
+        
+        df = convert_data_types(df)
+    
         df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
     
     # Commit and close the connection
@@ -138,18 +173,50 @@ def excel_to_sqlite(excel_file):
     print(f"Excel file {excel_file} has been successfully converted to {db_file}.")
     return True
 
+def GetHeaderColumn(df):
+    headers = df.iloc[0].tolist()       # Create a list for new headers
+    headers = pd.Series(headers).fillna("Unnamed")
+    
+    # Ensure all headers are strings and unique
+    unique_headers = []
+    for i, header in enumerate(headers):
+        header_str = str(header)  # Convert to string
+        if header_str in unique_headers:
+            unique_headers.append(f"{header_str}_{i}")
+        else:
+            unique_headers.append(header_str)
+    
+    df.columns = unique_headers
+    
+    return df
+
+def compare_arrays_with_alert(array1, array2):
+    # Find elements in array1 that are not in array2
+    missing_in_array2 = set(array1) - set(array2)
+    
+    # Find elements in array2 that are not in array1
+    missing_in_array1 = set(array2) - set(array1)
+    
+    if missing_in_array2 or missing_in_array1:
+        print("ALERT: The arrays are different!")
+        
+        if missing_in_array2:
+            print(f"Elements in array1 but not in array2: {', '.join(missing_in_array2)}")
+        
+        if missing_in_array1:
+            print(f"Elements in array2 but not in array1: {', '.join(missing_in_array1)}")
+    else:
+        print("The arrays contain the same elements.")
+    
+    return missing_in_array2, missing_in_array1
+        
 if __name__ == "__main__":
 
-    # folder_path = "D:/"
-    # for filename in os.listdir(folder_path):
-    #     if filename.endswith('.xlsx'):
-    #         if  excel_to_sqlite(folder_path + filename):
-    #             print("Conversion completed successfully.")
-    #         else:
-    #             print("Conversion completed with errors.")
-
-    excel_file = "D:\dbtest\YPF 8in x 10km Jet Fuel Pipeline Poliducto La Matanza to Aeroplanta Ezeiza UTMC List Pipe Tally_Rev.03.xlsx"
+    excel_file = "D:\dbtest\PlusPetrol_Argentina_12inch_82km_UTMC List of Pipe Tally_Rev01 1.xlsx"
+    # excel_file = "D:\dbtest\YPF 8in x 10km Jet Fuel Pipeline Poliducto La Matanza to Aeroplanta Ezeiza UTMC List Pipe Tally_Rev.03.xlsx"
     if  excel_to_sqlite(excel_file):
         print("Conversion completed successfully.")
     else:
         print("Conversion completed with errors.")
+
+    
