@@ -11,8 +11,8 @@ def set_specific_headers(df):
     df = df.copy()  # Work on a copy of the DataFrame
 
     # Extract the first two rows which may contain header information
-    first_row = df.iloc[0].fillna(method='ffill').tolist()
-    second_row = df.iloc[1].fillna(method='ffill').tolist()
+    first_row = df.iloc[0].ffill().tolist()
+    second_row = df.iloc[1].ffill().tolist()
 
     # Combine the rows to create the headers
     headers = []
@@ -132,15 +132,26 @@ def add_erf_type(df):
     return df
 
 def excel_to_sqlite(excel_file):
-    # Check if the Excel file exists
-    headfile = "D:\dbtest\header.xlsx"
-    xls = pd.ExcelFile(headfile)
-    for sheet_name in xls.sheet_names:
-        dfheader = pd.read_excel(xls, sheet_name=sheet_name, header=None)
-        # dfheader = pd.read_excel(headfile)
-           
-        GetHeaderColumn(dfheader)
+
+    # missing_in_df = True
+    # pipeTallyColumns = []  # Initialize it to None
+    # nomThickColumns = []
+    # headfile = resource_path("resoure\header.xlsx")
+    # xls = pd.ExcelFile(headfile)
+    # for sheet_name in xls.sheet_names:
+    #     dfheader = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+    #     # dfheader = pd.read_excel(headfile)
+
+    #     if(sheet_name == "List of Pipe Tally"):
+    #         GetHeaderColumn(dfheader)
+    #         pipeTallyColumns = dfheader.columns
+   
+    #     if(sheet_name == "List of Nominal Wall Thickness"):
+    #         GetHeaderColumn(dfheader)
+    #         nomThickColumns = dfheader.columns
     
+   
+ ################################## Start convert exel to db ######################################   
     if not os.path.exists(excel_file):
         print(f"Error: The file {excel_file} does not exist.")
         return False
@@ -154,17 +165,25 @@ def excel_to_sqlite(excel_file):
     # Loop through each sheet in the Excel file
     for sheet_name in xls.sheet_names:
         df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
-     
         # Set specific columns as headers
         df = set_specific_headers(df)
- 
-        # if (sheet_name == "List of Pipe Tally") :
-        df = add_erf_type(df) # Add the ERF flag
-
+        # Add the ERF flag
+        df = add_erf_type(df) 
         # Drop the isNormalERF column if it exists
         if 'isNormalERF' in df.columns:
             df = df.drop(columns=['isNormalERF'])
+        df = convert_data_types(df)
+        
+        # if (sheet_name == "List of Pipe Tally") :
+        #     missing_in_df = compare_arrays_with_alert(pipeTallyColumns, df.columns)
             
+        # if (sheet_name == "List of Nominal Wall Thickness"):    
+        #     missing_in_df = compare_arrays_with_alert(nomThickColumns, df.columns) 
+    
+        # if missing_in_df == False :
+        #     print(f"Error: The sheet {sheet_name} is missing some columns.")
+        # else:
+            # Write the DataFrame to the SQLite database
         df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
     
     # Commit and close the connection
@@ -192,26 +211,47 @@ def GetHeaderColumn(df):
     
     return df
 
-def compare_arrays_with_alert(array1, array2):
+def compare_arrays_with_alert(temp, data):
     # Find elements in array1 that are not in array2
-    missing_in_array2 = set(array1) - set(array2)
+    missing_in_array2 = set(temp) - set(data)
     
     # Find elements in array2 that are not in array1
-    missing_in_array1 = set(array2) - set(array1)
+    missing_in_array1 = set(data) - set(temp)
     
     if missing_in_array2 or missing_in_array1:
         print("ALERT: The arrays are different!")
         
         if missing_in_array2:
             print(f"Elements in array1 but not in array2: {', '.join(missing_in_array2)}")
-        
+            alert = f"Elements in array1 but not in array2: {', '.join(missing_in_array2)}"
+            return alert
+
         if missing_in_array1:
             print(f"Elements in array2 but not in array1: {', '.join(missing_in_array1)}")
+            alert = f"Elements in array1 but not in array2: {', '.join(missing_in_array2)}"
+            return alert
     else:
         print("The arrays contain the same elements.")
-    
-    return missing_in_array2, missing_in_array1
-        
+        alert = "OK"
+        return alert
+      
+
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+def convertArray(df):
+    # Convert the array to a list of lists
+    array = df.values.tolist()
+    return array
+
 if __name__ == "__main__":
 
     # folder_path = "D:/"
@@ -222,7 +262,7 @@ if __name__ == "__main__":
     #         else:
     #             print("Conversion completed with errors.")
 
-    excel_file = "D:\PlusPetrol_Argentina_12inch_82km_UTMC List of Pipe Tally_Rev01 1.xlsx"
+    excel_file = "D:\dbtest\YPF 8in x 10km Jet Fuel Pipeline Poliducto La Matanza to Aeroplanta Ezeiza UTMC List Pipe Tally_Rev.03.xlsx"
     if  excel_to_sqlite(excel_file):
         print("Conversion completed successfully.")
     else:
