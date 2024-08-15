@@ -133,14 +133,6 @@ def add_erf_type(df):
 
 def excel_to_sqlite(excel_file):
     # Check if the Excel file exists
-    headfile = "D:\dbtest\header.xlsx"
-    xls = pd.ExcelFile(headfile)
-    for sheet_name in xls.sheet_names:
-        dfheader = pd.read_excel(xls, sheet_name=sheet_name, header=None)
-        # dfheader = pd.read_excel(headfile)
-           
-        GetHeaderColumn(dfheader)
-    
     if not os.path.exists(excel_file):
         print(f"Error: The file {excel_file} does not exist.")
         return False
