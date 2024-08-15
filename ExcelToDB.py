@@ -4,6 +4,7 @@ import sqlite3
 import sys
 import os
 import re
+import openpyxl
 
 def set_specific_headers(df):
     """Set specific columns as headers for the DataFrame, preserving original structure."""
@@ -38,6 +39,7 @@ def set_specific_headers(df):
     df.columns = unique_headers
     df = df.drop([0, 1]).reset_index(drop=True)  # Drop the first two rows after setting headers and reset index
     return df
+
 
 def custom_round(x):
     """Custom rounding function: round down at 0.49 and up at 0.5."""
@@ -94,20 +96,24 @@ def convert_data_types(df):
     for col in numeric_columns_to_round:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round).apply(lambda x: str(int(x)) if pd.notnull(x) else None)
-
     for col in df.columns:
         if col not in ["Log distance [m]"] + columns_three_decimal + columns_two_decimal + numeric_columns_to_round + ["Max. depth [%]"]:
             df[col] = df[col].astype(str).replace({'nan': None, 'None': None, '': None}).where(pd.notnull(df[col]), None)
-
+ 
     return df
 
 def add_erf_type(df):
     """Add ERF flag based on ERF column."""
     if 'ERF (Modified)' in df.columns and 'ERF (metal loss)' in df.columns:
+        #It finds the position of 'ERF (Modified)' column.
         position = df.columns.get_loc('ERF (Modified)')
+        #Creates a new 'ERF' column, using 'ERF (Modified)' values if they're not null, otherwise using 'ERF (metal loss)' values.
         df['ERF'] = df.apply(lambda row: row['ERF (Modified)'] if pd.notnull(row['ERF (Modified)']) else row['ERF (metal loss)'], axis=1)
+        #Inserts the new 'ERF' column at the position of 'ERF (Modified)'.
         df.insert(position, 'ERF', df.pop('ERF'))
+        #Creates an 'isNormalERF' column, which is True where 'ERF (metal loss)' is not null.
         df['isNormalERF'] = df['ERF (metal loss)'].notnull()
+        #Drops the original 'ERF (Modified)' and 'ERF (metal loss)' columns.
         df = df.drop(columns=['ERF (Modified)', 'ERF (metal loss)'])
     elif 'ERF (Modified)' in df.columns:
         position = df.columns.get_loc('ERF (Modified)')
@@ -121,10 +127,20 @@ def add_erf_type(df):
         df.insert(position, 'ERF', df.pop('ERF'))
         df['isNormalERF'] = True
         df = df.drop(columns=['ERF (metal loss)'])
+    else:
+        df['isNormalERF'] = True
     return df
 
 def excel_to_sqlite(excel_file):
     # Check if the Excel file exists
+    headfile = "D:\dbtest\header.xlsx"
+    xls = pd.ExcelFile(headfile)
+    for sheet_name in xls.sheet_names:
+        dfheader = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+        # dfheader = pd.read_excel(headfile)
+           
+        GetHeaderColumn(dfheader)
+    
     if not os.path.exists(excel_file):
         print(f"Error: The file {excel_file} does not exist.")
         return False
@@ -135,14 +151,14 @@ def excel_to_sqlite(excel_file):
     
     # Read the Excel file
     xls = pd.ExcelFile(excel_file)
-    
     # Loop through each sheet in the Excel file
     for sheet_name in xls.sheet_names:
         df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
-
+     
         # Set specific columns as headers
         df = set_specific_headers(df)
-        df = convert_data_types(df)
+ 
+        # if (sheet_name == "List of Pipe Tally") :
         df = add_erf_type(df) # Add the ERF flag
 
         # Drop the isNormalERF column if it exists
@@ -159,6 +175,43 @@ def excel_to_sqlite(excel_file):
     print(f"Excel file {excel_file} has been successfully converted to {db_file}.")
     return True
 
+def GetHeaderColumn(df):
+    headers = df.iloc[0].tolist()       # Create a list for new headers
+    headers = pd.Series(headers).fillna("Unnamed")
+    
+    # Ensure all headers are strings and unique
+    unique_headers = []
+    for i, header in enumerate(headers):
+        header_str = str(header)  # Convert to string
+        if header_str in unique_headers:
+            unique_headers.append(f"{header_str}_{i}")
+        else:
+            unique_headers.append(header_str)
+    
+    df.columns = unique_headers
+    
+    return df
+
+def compare_arrays_with_alert(array1, array2):
+    # Find elements in array1 that are not in array2
+    missing_in_array2 = set(array1) - set(array2)
+    
+    # Find elements in array2 that are not in array1
+    missing_in_array1 = set(array2) - set(array1)
+    
+    if missing_in_array2 or missing_in_array1:
+        print("ALERT: The arrays are different!")
+        
+        if missing_in_array2:
+            print(f"Elements in array1 but not in array2: {', '.join(missing_in_array2)}")
+        
+        if missing_in_array1:
+            print(f"Elements in array2 but not in array1: {', '.join(missing_in_array1)}")
+    else:
+        print("The arrays contain the same elements.")
+    
+    return missing_in_array2, missing_in_array1
+        
 if __name__ == "__main__":
 
     # folder_path = "D:/"
@@ -174,3 +227,5 @@ if __name__ == "__main__":
         print("Conversion completed successfully.")
     else:
         print("Conversion completed with errors.")
+
+    
