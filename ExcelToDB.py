@@ -165,6 +165,7 @@ def excel_to_sqlite(excel_file):
         if 'isNormalERF' in df.columns:
             df = df.drop(columns=['isNormalERF'])
             
+        df = convert_data_types(df)    
         df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
     
     # Commit and close the connection
