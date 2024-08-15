@@ -11,8 +11,10 @@ def set_specific_headers(df):
     df = df.copy()  # Work on a copy of the DataFrame
 
     # Extract the first two rows which may contain header information
-    first_row = df.iloc[0].fillna(method='ffill').tolist()
-    second_row = df.iloc[1].fillna(method='ffill').tolist()
+    # first_row = df.iloc[0].fillna(method='ffill').tolist()
+    # second_row = df.iloc[1].fillna(method='ffill').tolist()
+    first_row = df.iloc[0].ffill().tolist()
+    second_row = df.iloc[1].ffill().tolist()
 
     # Combine the rows to create the headers
     headers = []
