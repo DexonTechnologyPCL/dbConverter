@@ -133,22 +133,22 @@ def add_erf_type(df):
 
 def excel_to_sqlite(excel_file):
 
-    # missing_in_df = True
-    # pipeTallyColumns = []  # Initialize it to None
-    # nomThickColumns = []
-    # headfile = resource_path("resoure\header.xlsx")
-    # xls = pd.ExcelFile(headfile)
-    # for sheet_name in xls.sheet_names:
-    #     dfheader = pd.read_excel(xls, sheet_name=sheet_name, header=None)
-    #     # dfheader = pd.read_excel(headfile)
+    missing_in_df = True
+    pipeTallyColumns = []  # Initialize it to None
+    nomThickColumns = []
+    headfile = resource_path("resoure\header.xlsx")
+    xls = pd.ExcelFile(headfile)
+    for sheet_name in xls.sheet_names:
+        dfheader = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+        # dfheader = pd.read_excel(headfile)
 
-    #     if(sheet_name == "List of Pipe Tally"):
-    #         GetHeaderColumn(dfheader)
-    #         pipeTallyColumns = dfheader.columns
+        if(sheet_name == "List of Pipe Tally"):
+            GetHeaderColumn(dfheader)
+            pipeTallyColumns = dfheader.columns
    
-    #     if(sheet_name == "List of Nominal Wall Thickness"):
-    #         GetHeaderColumn(dfheader)
-    #         nomThickColumns = dfheader.columns
+        if(sheet_name == "List of Nominal Wall Thickness"):
+            GetHeaderColumn(dfheader)
+            nomThickColumns = dfheader.columns
     
    
  ################################## Start convert exel to db ######################################   
@@ -174,17 +174,17 @@ def excel_to_sqlite(excel_file):
             df = df.drop(columns=['isNormalERF'])
         df = convert_data_types(df)
         
-        # if (sheet_name == "List of Pipe Tally") :
-        #     missing_in_df = compare_arrays_with_alert(pipeTallyColumns, df.columns)
+        if (sheet_name == "List of Pipe Tally") :
+            missing_in_df = compare_arrays_with_alert(pipeTallyColumns, df.columns)
             
-        # if (sheet_name == "List of Nominal Wall Thickness"):    
-        #     missing_in_df = compare_arrays_with_alert(nomThickColumns, df.columns) 
+        if (sheet_name == "List of Nominal Wall Thickness"):    
+            missing_in_df = compare_arrays_with_alert(nomThickColumns, df.columns) 
     
-        # if missing_in_df == False :
-        #     print(f"Error: The sheet {sheet_name} is missing some columns.")
-        # else:
+        if missing_in_df == False :
+            print(f"Error: The sheet {sheet_name} is missing some columns.")
+        else:
             # Write the DataFrame to the SQLite database
-        df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
+            df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
     
     # Commit and close the connection
     conn.commit()
@@ -267,5 +267,3 @@ if __name__ == "__main__":
         print("Conversion completed successfully.")
     else:
         print("Conversion completed with errors.")
-
-    
