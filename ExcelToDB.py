@@ -6,14 +6,26 @@ import os
 import re
 
 def set_specific_headers(df):
-    """Set specific columns as headers for the DataFrame."""
-    df = df.copy()  # Ensure we are working on a copy of the DataFrame
+    """Set specific columns as headers for the DataFrame, preserving original structure."""
+    df = df.copy()  # Work on a copy of the DataFrame
 
-    headers = df.iloc[1].tolist()       # Create a list for new headers
-    headers[0] = "Log distance [m]"     # Set specific headers for columns 0 and 25
-    headers[25] = "Comments"
-    headers = pd.Series(headers).fillna("Unnamed")
-    
+    # Extract the first two rows which may contain header information
+    first_row = df.iloc[0].fillna(method='ffill').tolist()
+    second_row = df.iloc[1].fillna(method='ffill').tolist()
+
+    # Combine the rows to create the headers
+    headers = []
+    for i in range(len(second_row)):
+        if pd.notna(second_row[i]) and second_row[i].strip() != '':
+            headers.append(second_row[i].strip())
+        elif pd.notna(first_row[i]) and first_row[i].strip() != '':
+            headers.append(first_row[i].strip())
+        else:
+            headers.append(f"Unnamed_{i}")  # Assign a placeholder for truly empty headers
+
+    if "Comments" not in headers and len(headers) > 1:
+        headers[-1] = "Comments"  # Forcefully assign if missing
+
     # Ensure all headers are strings and unique
     unique_headers = []
     for i, header in enumerate(headers):
@@ -58,26 +70,30 @@ def custom_round_two_decimal(x):
 
 def convert_data_types(df):
     """Convert data types of specific columns."""
-    df["Log distance [m]"] = pd.to_numeric(df["Log distance [m]"], errors='coerce').round(3)
+
+    if "Log distance [m]" in df.columns:
+        df["Log distance [m]"] = pd.to_numeric(df["Log distance [m]"], errors='coerce').round(3)
     
-    # Convert specific columns to numeric and round decimal 
-    columns_three_decimal = [
-        "Altitude [m]", "Joint / component length [m]", 
-        "Abs. Dist. to upstream weld [m]", "Remaining thickness [mm]"
-    ]
+    # List of columns to process for three decimal places
+    columns_three_decimal = ["Altitude [m]", "Joint / component length [m]", "Abs. Dist. to upstream weld [m]", "Remaining thickness [mm]"]
+    
     for col in columns_three_decimal:
-        df[col] = pd.to_numeric(df[col], errors='coerce').round(3).apply(lambda x: f"{x:.3f}" if pd.notnull(x) else None)
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').round(3).apply(lambda x: f"{x:.3f}" if pd.notnull(x) else None)
 
     columns_two_decimal = ["Nominal Internal diameter [mm]", "Max. depth [mm]"]
+    
     for col in columns_two_decimal:
-         df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round_two_decimal).apply(lambda x: f"{x:.2f}" if pd.notnull(x) else None)
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round_two_decimal).apply(lambda x: f"{x:.2f}" if pd.notnull(x) else None)
 
-    # Special handling for Max. depth [%]
-    df["Max. depth [%]"] = df["Max. depth [%]"].apply(custom_round_max_depth)
+    if "Max. depth [%]" in df.columns:
+        df["Max. depth [%]"] = df["Max. depth [%]"].apply(custom_round_max_depth)
 
     numeric_columns_to_round = ["Length [mm]", "Width [mm]"]
     for col in numeric_columns_to_round:
-        df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round).apply(lambda x: str(int(x)) if pd.notnull(x) else None)
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round).apply(lambda x: str(int(x)) if pd.notnull(x) else None)
 
     for col in df.columns:
         if col not in ["Log distance [m]"] + columns_three_decimal + columns_two_decimal + numeric_columns_to_round + ["Max. depth [%]"]:
@@ -128,13 +144,18 @@ def excel_to_sqlite(excel_file):
         df = set_specific_headers(df)
         df = convert_data_types(df)
         df = add_erf_type(df) # Add the ERF flag
-        df = df.drop(columns=['isNormalERF'])  # Drop the isNormalERF column before saving
+
+        # Drop the isNormalERF column if it exists
+        if 'isNormalERF' in df.columns:
+            df = df.drop(columns=['isNormalERF'])
+            
         df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
     
     # Commit and close the connection
     conn.commit()
     conn.close()
     
+    print(f"Processing sheet: {sheet_name}")
     print(f"Excel file {excel_file} has been successfully converted to {db_file}.")
     return True
 
@@ -148,7 +169,7 @@ if __name__ == "__main__":
     #         else:
     #             print("Conversion completed with errors.")
 
-    excel_file = "D:\dbtest\YPF 8in x 10km Jet Fuel Pipeline Poliducto La Matanza to Aeroplanta Ezeiza UTMC List Pipe Tally_Rev.03.xlsx"
+    excel_file = "D:\PlusPetrol_Argentina_12inch_82km_UTMC List of Pipe Tally_Rev01 1.xlsx"
     if  excel_to_sqlite(excel_file):
         print("Conversion completed successfully.")
     else:
