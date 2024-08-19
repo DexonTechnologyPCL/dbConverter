@@ -6,7 +6,8 @@ import os
 import re
 import openpyxl
 
-def set_specific_headers(df):
+
+def set_specific_headers(df, sheetname):
     """Set specific columns as headers for the DataFrame, preserving original structure."""
     df = df.copy()  # Work on a copy of the DataFrame
 
@@ -23,9 +24,10 @@ def set_specific_headers(df):
             headers.append(first_row[i].strip())
         else:
             headers.append(f"Unnamed_{i}")  # Assign a placeholder for truly empty headers
-
-    if "Comments" not in headers and len(headers) > 1:
-        headers[-1] = "Comments"  # Forcefully assign if missing
+            
+    if(sheetname !="List of Nominal Wall Thickness"):
+        if "Comments" not in headers and len(headers) > 1:
+            headers[-1] = "Comments"  # Forcefully assign if missing
 
     # Ensure all headers are strings and unique
     unique_headers = []
@@ -132,14 +134,21 @@ def add_erf_type(df):
     return df
 
 def excel_to_sqlite(excel_file):
-
+###################################### Get Column Header ##########################################
     missing_in_df = True
-    pipeTallyColumns = []  # Initialize it to None
+    # check_List_Pipe = False
+    # check_List_Nominal = False
+    pipeTallyColumns = []  
     nomThickColumns = []
     headfile = resource_path("resoure\header.xlsx")
-    xls = pd.ExcelFile(headfile)
-    for sheet_name in xls.sheet_names:
-        dfheader = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+    
+    if not os.path.exists(headfile):
+        print(f"Error: The file {headfile} does not exist.")
+        return False
+    
+    xlsHead = pd.ExcelFile(headfile)
+    for sheet_name in xlsHead.sheet_names:
+        dfheader = pd.read_excel(xlsHead, sheet_name=sheet_name, header=None)
         # dfheader = pd.read_excel(headfile)
 
         if(sheet_name == "List of Pipe Tally"):
@@ -166,32 +175,51 @@ def excel_to_sqlite(excel_file):
     for sheet_name in xls.sheet_names:
         df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
         # Set specific columns as headers
-        df = set_specific_headers(df)
+        df = set_specific_headers(df, sheet_name)
         # Add the ERF flag
-        df = add_erf_type(df) 
-        # Drop the isNormalERF column if it exists
-        if 'isNormalERF' in df.columns:
-            df = df.drop(columns=['isNormalERF'])
-        df = convert_data_types(df)
-        
+          
         if (sheet_name == "List of Pipe Tally") :
+            check_List_Pipe = True #Check have List of Pipe Tally
+            
+            df = add_erf_type(df) 
+            
+            # Drop the isNormalERF column if it exists
+            if 'isNormalERF' in df.columns:
+                df = df.drop(columns=['isNormalERF'])
+            df = convert_data_types(df)
+            
             missing_in_df = compare_arrays_with_alert(pipeTallyColumns, df.columns)
+            if missing_in_df != 'OK' :
+                print(f"Error: The sheet {sheet_name} is " + missing_in_df)
+                return False
+            else:
+            # Write the DataFrame to the SQLite database
+                df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
             
         if (sheet_name == "List of Nominal Wall Thickness"):    
+            # if( len(df.columns) != len(nomThickColumns) ):
+            #     print(f"Error: The sheet {sheet_name} is not in format db")
+            check_List_Nominal = True
             missing_in_df = compare_arrays_with_alert(nomThickColumns, df.columns) 
-    
-        if missing_in_df == False :
-            print(f"Error: The sheet {sheet_name} is missing some columns.")
-        else:
+            if missing_in_df != 'OK' :
+                print(f"Error: The sheet {sheet_name} is " + missing_in_df)
+                return False
+            else:
             # Write the DataFrame to the SQLite database
-            df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
+                df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
     
+    
+    if(check_List_Pipe == False):
+        print(f"Error: The sheet List of Pipe Tally is missing")
+    if(check_List_Nominal ==False):
+        print(f"Error: The sheet List of Nominal Wall Thickness is missing")
+        
     # Commit and close the connection
     conn.commit()
     conn.close()
     
-    print(f"Processing sheet: {sheet_name}")
-    print(f"Excel file {excel_file} has been successfully converted to {db_file}.")
+    # print(f"Processing sheet: {sheet_name}")
+    # print(f"Excel file {excel_file} has been successfully converted to {db_file}.")
     return True
 
 def GetHeaderColumn(df):
@@ -213,25 +241,16 @@ def GetHeaderColumn(df):
 
 def compare_arrays_with_alert(temp, data):
     # Find elements in array1 that are not in array2
-    missing_in_array2 = set(temp) - set(data)
+    missing_in_data = set(temp) - set(data)
     
     # Find elements in array2 that are not in array1
-    missing_in_array1 = set(data) - set(temp)
-    
-    if missing_in_array2 or missing_in_array1:
-        print("ALERT: The arrays are different!")
-        
-        if missing_in_array2:
-            print(f"Elements in array1 but not in array2: {', '.join(missing_in_array2)}")
-            alert = f"Elements in array1 but not in array2: {', '.join(missing_in_array2)}"
-            return alert
+    missing_in_temp = set(data) - set(temp)
 
-        if missing_in_array1:
-            print(f"Elements in array2 but not in array1: {', '.join(missing_in_array1)}")
-            alert = f"Elements in array1 but not in array2: {', '.join(missing_in_array2)}"
-            return alert
+    if missing_in_data:         
+        alert = f"Missing column : {', '.join(missing_in_data)}"
+        return alert
+
     else:
-        print("The arrays contain the same elements.")
         alert = "OK"
         return alert
       
@@ -247,23 +266,23 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
-def convertArray(df):
-    # Convert the array to a list of lists
-    array = df.values.tolist()
-    return array
+def main():
+    # Get the path to the Excel file
+    # excel_file = "D:\dbtest\PlusPetrol_Argentina_12inch_82km_UTMC List of Pipe Tally_Rev01 1.xlsx"
+    if len(sys.argv) < 2:
+        print("Error: No file path provided")
+        return
 
-if __name__ == "__main__":
-
-    # folder_path = "D:/"
-    # for filename in os.listdir(folder_path):
-    #     if filename.endswith('.xlsx'):
-    #         if  excel_to_sqlite(folder_path + filename):
-    #             print("Conversion completed successfully.")
-    #         else:
-    #             print("Conversion completed with errors.")
-
-    excel_file = "D:\dbtest\YPF 8in x 10km Jet Fuel Pipeline Poliducto La Matanza to Aeroplanta Ezeiza UTMC List Pipe Tally_Rev.03.xlsx"
-    if  excel_to_sqlite(excel_file):
+    excel_file = sys.argv[1]
+    
+    if  excel_to_sqlite(excel_file) :
         print("Conversion completed successfully.")
-    else:
-        print("Conversion completed with errors.")
+    # else:
+    #     print("Conversion completed with errors.")
+
+      
+if __name__ == "__main__":
+    main()
+    
+
+    
