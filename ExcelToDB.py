@@ -172,7 +172,9 @@ def excel_to_sqlite(excel_file):
     # Read the Excel file
     xls = pd.ExcelFile(excel_file)
     # Loop through each sheet in the Excel file
-    for sheet_name in xls.sheet_names:
+    total_sheets = len(xls.sheet_names)
+    # for sheet_name in xls.sheet_names:
+    for i, sheet_name in enumerate(xls.sheet_names, 1):
         df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
         # Set specific columns as headers
         df = set_specific_headers(df, sheet_name)
@@ -188,9 +190,13 @@ def excel_to_sqlite(excel_file):
                 df = df.drop(columns=['isNormalERF'])
             df = convert_data_types(df)
             
-            missing_in_df = compare_arrays_with_alert(pipeTallyColumns, df.columns)
-            if missing_in_df != 'OK' :
-                print(f"Error: The sheet {sheet_name} is " + missing_in_df)
+            message, misspelled, true_extra, missing  = compare_arrays_with_alert(pipeTallyColumns, df.columns)
+            if message != 'OK' :
+                print(f"Error: The sheet {sheet_name} is ")
+                print(f"Message: {message}")
+                print(f"Potentially misspelled columns: {misspelled}")
+                print(f"Extra columns (not misspelled): {true_extra}")
+                print(f"Missing columns: {missing}")
                 return False
             else:
             # Write the DataFrame to the SQLite database
@@ -200,13 +206,21 @@ def excel_to_sqlite(excel_file):
             # if( len(df.columns) != len(nomThickColumns) ):
             #     print(f"Error: The sheet {sheet_name} is not in format db")
             check_List_Nominal = True
-            missing_in_df = compare_arrays_with_alert(nomThickColumns, df.columns) 
-            if missing_in_df != 'OK' :
-                print(f"Error: The sheet {sheet_name} is " + missing_in_df)
+            message, misspelled, true_extra, missing = compare_arrays_with_alert(nomThickColumns, df.columns) 
+            if message != 'OK' :
+                print(f"Error: The sheet {sheet_name} is " )
+                print(f"Message: {message}")
+                print(f"Potentially misspelled columns: {misspelled}")
+                print(f"Extra columns (not misspelled): {true_extra}")
+                print(f"Missing columns: {missing}")
                 return False
             else:
             # Write the DataFrame to the SQLite database
                 df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
+                
+        # Report progress after processing each sheet
+        progress = int((i / total_sheets) * 100)
+        print(f"PROGRESS:{progress}", flush=True)
     
     
     if(check_List_Pipe == False):
@@ -240,21 +254,44 @@ def GetHeaderColumn(df):
     return df
 
 def compare_arrays_with_alert(temp, data):
-    # Find elements in array1 that are not in array2
-    missing_in_data = set(temp) - set(data)
+    # Convert both arrays to sets
+    temp_set = set(temp)
+    data_set = set(data)
     
-    # Find elements in array2 that are not in array1
-    missing_in_temp = set(data) - set(temp)
-
-    if missing_in_data:         
-        alert = f"Missing column : {', '.join(missing_in_data)}"
-        return alert
-
+    # Find elements in temp that are not in data (potentially missing)
+    potentially_missing = temp_set - data_set
+    
+    # Find elements in data that are not in temp (extra)
+    extra_in_data = data_set - temp_set
+    
+    # Initialize variables
+    missing = set()
+    misspelled = []  
+    true_extra = []
+    
+    # Check for potential misspellings and true extra data
+    for word in extra_in_data:
+        if any(sum((c1 != c2) for c1, c2 in zip(word, temp_word)) <= 2 and abs(len(word) - len(temp_word)) <= 2 for temp_word in temp_set):
+            misspelled.append(word)
+        else:
+            true_extra.append(word)
+    
+    # Check if potentially missing columns are truly missing or just misspelled
+    for temp_word in potentially_missing:
+        if not any(sum((c1 != c2) for c1, c2 in zip(temp_word, data_word)) <= 2 and abs(len(temp_word) - len(data_word)) <= 2 for data_word in data_set):
+            missing.add(temp_word)
+    
+    # Generate alert message
+    if missing:
+        message  = f"Missing column(s): {', '.join(missing)}"
+    if len(misspelled) > 0 :
+        message  = f"Misspelled column(s): {', '.join(misspelled)}"
+    if len(true_extra) > 0 :
+        message  = f"Extra column(s): {', '.join(true_extra)}"
     else:
-        alert = "OK"
-        return alert
+        message  = "OK"
       
-
+    return  message, misspelled, true_extra, list(missing)
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -268,15 +305,15 @@ def resource_path(relative_path):
 
 def main():
     # Get the path to the Excel file
-    # excel_file = "D:\dbtest\PlusPetrol_Argentina_12inch_82km_UTMC List of Pipe Tally_Rev01 1.xlsx"
-    if len(sys.argv) < 2:
-        print("Error: No file path provided")
-        return
+    excel_file = "D:\dbtest\YPF 8in x 10km Jet Fuel Pipeline Poliducto La Matanza to Aeroplanta Ezeiza UTMC List Pipe Tally_Rev.03.xlsx"
+    # if len(sys.argv) < 2:
+    #     print("Error: No file path provided")
+    #     return
 
-    excel_file = sys.argv[1]
+    # excel_file = sys.argv[1]
     
     if  excel_to_sqlite(excel_file) :
-        print("Conversion completed successfully.")
+        print("Msg: Conversion completed successfully.")
     # else:
     #     print("Conversion completed with errors.")
 
