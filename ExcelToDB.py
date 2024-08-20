@@ -257,13 +257,13 @@ def excel_to_sqlite(excel_file):
             message, misspelled, true_extra, missing  = compare_arrays_with_alert(pipeTallyColumns, df.columns)
             if message != 'OK' :
                 if(len(misspelled) > 0 or len(missing) > 0):
-                    print(f"Error: The sheet {sheet_name} is " )
-                    print(f"Misspelled columns: {', '.join(misspelled)}" )
-                    print(f"Missing columns: {', '.join(missing)}" )
+                    print(f"Error: The sheet {sheet_name} is |" 
+                            f"Misspelled columns: {', '.join(misspelled)} |" 
+                            f"Missing columns: {', '.join(missing)}" )
                     return False
                 if(len(true_extra) > 0):
-                    print(f"Warning: The sheet {sheet_name} is " )
-                    print(f"Extra columns : {', '.join(true_extra)}" )
+                    print(f"Warning: The sheet {sheet_name} is |" 
+                            f"Extra columns : {', '.join(true_extra)}" )
                     df.to_sql(sheet_name, conn, if_exists= 'replace', index=False) 
             else:
             # Write the DataFrame to the SQLite database
@@ -274,18 +274,16 @@ def excel_to_sqlite(excel_file):
             message, misspelled, true_extra, missing = compare_arrays_with_alert(nomThickColumns, df.columns) 
             if message != 'OK' :
                 if(len(misspelled) > 0 or len(missing) > 0):
-                            # alert = f"Missing column : {', '.join(missing_in_data)}"
-                    print(f"Error: The sheet {sheet_name} is "  )
-                    print(f"Misspelled columns: {', '.join(misspelled)}"  )
-                    print(f"Missing columns: {', '.join(missing)}"  )
+                    print(f"Error: The sheet {sheet_name} is |"  
+                            f"Misspelled columns: {', '.join(misspelled)} |"  
+                            f"Missing columns: {', '.join(missing)}"  )
                     return False
                 if(len(true_extra) > 0):
-                    print(f"Warning: The sheet {sheet_name} is " )
-                    print(f"Extra columns : {', '.join(true_extra)}" )
+                    print(f"Warning: The sheet {sheet_name} is |" 
+                            f"Extra columns : {', '.join(true_extra)}" )
                     df.to_sql(sheet_name, conn, if_exists='replace', index=False) 
             else:
-            # Write the DataFrame to the SQLite database
-                df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
+                df.to_sql(sheet_name, conn, if_exists='replace', index=False) 
                 
         # Report progress after processing each sheet
         progress = int((i / total_sheets) * 100)
@@ -294,8 +292,10 @@ def excel_to_sqlite(excel_file):
     
     if(check_List_Pipe == False):
         print(f"Error: The sheet List of Pipe Tally is missing")
+        return False
     if(check_List_Nominal ==False):
         print(f"Error: The sheet List of Nominal Wall Thickness is missing")
+        return False
         
     # Commit and close the connection
     conn.commit()
@@ -317,15 +317,9 @@ def main():
     
     if  excel_to_sqlite(excel_file) :
         print("Msg: Conversion completed successfully.")
-    
-    #test function
-    # nomThickColumns =["drink", "water", "apple" , "sumsung"]
-    # data = ["num1", "nm3", "Test", "applePO",  "sumsang", "apple"]
-    # message, misspelled, true_extra, missing = compare_arrays_with_alert(nomThickColumns, data) 
-    # print(f"Extra columns : {', '.join(true_extra)}" )
-    # print(f"Misspelled columns: {', '.join(misspelled)}"  )
-    # print(f"Missing columns: {', '.join(missing)}"  )
-      
+    else :
+        print("Msg: Conversion failed.")
+
 if __name__ == "__main__":
     main()
     
