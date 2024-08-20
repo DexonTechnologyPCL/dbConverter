@@ -133,6 +133,70 @@ def add_erf_type(df):
         df['isNormalERF'] = True
     return df
 
+
+def GetHeaderColumn(df):
+    headers = df.iloc[0].tolist()       # Create a list for new headers
+    headers = pd.Series(headers).fillna("Unnamed")
+    
+    # Ensure all headers are strings and unique
+    unique_headers = []
+    for i, header in enumerate(headers):
+        header_str = str(header)  # Convert to string
+        if header_str in unique_headers:
+            unique_headers.append(f"{header_str}_{i}")
+        else:
+            unique_headers.append(header_str)
+    
+    df.columns = unique_headers
+    
+    return df
+
+def compare_arrays_with_alert(temp, data):
+    # Convert both arrays to sets
+    temp_set = set(temp)
+    data_set = set(data)
+    
+    # Find elements in temp that are not in data (potentially missing)
+    potentially_missing = temp_set - data_set
+    
+    # Find elements in data that are not in temp (extra)
+    extra_in_data = data_set - temp_set
+    
+    # Initialize variables
+    missing = set()
+    misspelled = []  
+    true_extra = []
+    
+    # Check for potential misspellings and true extra data
+    for word in extra_in_data:
+        if any(sum((c1 != c2) for c1, c2 in zip(word, temp_word)) <= 2 and abs(len(word) - len(temp_word)) <= 2 for temp_word in temp_set):
+            misspelled.append(word)
+        else:
+            true_extra.append(word)
+    
+    # Check if potentially missing columns are truly missing or just misspelled
+    for temp_word in potentially_missing:
+        if not any(sum((c1 != c2) for c1, c2 in zip(temp_word, data_word)) <= 2 and abs(len(temp_word) - len(data_word)) <= 2 for data_word in data_set):
+            missing.add(temp_word)
+    
+    # Check data is OK
+    if len(missing) == 0  and len(misspelled) == 0 and len(true_extra) == 0:
+        message  = "OK"
+    else:
+        message = "HAVE ERROR"
+      
+    return  message, misspelled, true_extra, list(missing)
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 def excel_to_sqlite(excel_file):
 ###################################### Get Column Header ##########################################
     missing_in_df = True
@@ -182,7 +246,7 @@ def excel_to_sqlite(excel_file):
           
         if (sheet_name == "List of Pipe Tally") :
             check_List_Pipe = True #Check have List of Pipe Tally
-            
+                
             df = add_erf_type(df) 
             
             # Drop the isNormalERF column if it exists
@@ -192,28 +256,33 @@ def excel_to_sqlite(excel_file):
             
             message, misspelled, true_extra, missing  = compare_arrays_with_alert(pipeTallyColumns, df.columns)
             if message != 'OK' :
-                print(f"Error: The sheet {sheet_name} is ")
-                print(f"Message: {message}")
-                print(f"Potentially misspelled columns: {misspelled}")
-                print(f"Extra columns (not misspelled): {true_extra}")
-                print(f"Missing columns: {missing}")
-                return False
+                if(len(misspelled) > 0 or len(missing) > 0):
+                    print(f"Error: The sheet {sheet_name} is " )
+                    print(f"Misspelled columns: {', '.join(misspelled)}" )
+                    print(f"Missing columns: {', '.join(missing)}" )
+                    return False
+                if(len(true_extra) > 0):
+                    print(f"Warning: The sheet {sheet_name} is " )
+                    print(f"Extra columns : {', '.join(true_extra)}" )
+                    df.to_sql(sheet_name, conn, if_exists= 'replace', index=False) 
             else:
             # Write the DataFrame to the SQLite database
                 df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
             
         if (sheet_name == "List of Nominal Wall Thickness"):    
-            # if( len(df.columns) != len(nomThickColumns) ):
-            #     print(f"Error: The sheet {sheet_name} is not in format db")
             check_List_Nominal = True
             message, misspelled, true_extra, missing = compare_arrays_with_alert(nomThickColumns, df.columns) 
             if message != 'OK' :
-                print(f"Error: The sheet {sheet_name} is " )
-                print(f"Message: {message}")
-                print(f"Potentially misspelled columns: {misspelled}")
-                print(f"Extra columns (not misspelled): {true_extra}")
-                print(f"Missing columns: {missing}")
-                return False
+                if(len(misspelled) > 0 or len(missing) > 0):
+                            # alert = f"Missing column : {', '.join(missing_in_data)}"
+                    print(f"Error: The sheet {sheet_name} is "  )
+                    print(f"Misspelled columns: {', '.join(misspelled)}"  )
+                    print(f"Missing columns: {', '.join(missing)}"  )
+                    return False
+                if(len(true_extra) > 0):
+                    print(f"Warning: The sheet {sheet_name} is " )
+                    print(f"Extra columns : {', '.join(true_extra)}" )
+                    df.to_sql(sheet_name, conn, if_exists='replace', index=False) 
             else:
             # Write the DataFrame to the SQLite database
                 df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
@@ -231,92 +300,31 @@ def excel_to_sqlite(excel_file):
     # Commit and close the connection
     conn.commit()
     conn.close()
-    
-    # print(f"Processing sheet: {sheet_name}")
-    # print(f"Excel file {excel_file} has been successfully converted to {db_file}.")
+
     return True
-
-def GetHeaderColumn(df):
-    headers = df.iloc[0].tolist()       # Create a list for new headers
-    headers = pd.Series(headers).fillna("Unnamed")
-    
-    # Ensure all headers are strings and unique
-    unique_headers = []
-    for i, header in enumerate(headers):
-        header_str = str(header)  # Convert to string
-        if header_str in unique_headers:
-            unique_headers.append(f"{header_str}_{i}")
-        else:
-            unique_headers.append(header_str)
-    
-    df.columns = unique_headers
-    
-    return df
-
-def compare_arrays_with_alert(temp, data):
-    # Convert both arrays to sets
-    temp_set = set(temp)
-    data_set = set(data)
-    
-    # Find elements in temp that are not in data (potentially missing)
-    potentially_missing = temp_set - data_set
-    
-    # Find elements in data that are not in temp (extra)
-    extra_in_data = data_set - temp_set
-    
-    # Initialize variables
-    missing = set()
-    misspelled = []  
-    true_extra = []
-    
-    # Check for potential misspellings and true extra data
-    for word in extra_in_data:
-        if any(sum((c1 != c2) for c1, c2 in zip(word, temp_word)) <= 2 and abs(len(word) - len(temp_word)) <= 2 for temp_word in temp_set):
-            misspelled.append(word)
-        else:
-            true_extra.append(word)
-    
-    # Check if potentially missing columns are truly missing or just misspelled
-    for temp_word in potentially_missing:
-        if not any(sum((c1 != c2) for c1, c2 in zip(temp_word, data_word)) <= 2 and abs(len(temp_word) - len(data_word)) <= 2 for data_word in data_set):
-            missing.add(temp_word)
-    
-    # Generate alert message
-    if missing:
-        message  = f"Missing column(s): {', '.join(missing)}"
-    if len(misspelled) > 0 :
-        message  = f"Misspelled column(s): {', '.join(misspelled)}"
-    if len(true_extra) > 0 :
-        message  = f"Extra column(s): {', '.join(true_extra)}"
-    else:
-        message  = "OK"
-      
-    return  message, misspelled, true_extra, list(missing)
-
-def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-
-    return os.path.join(base_path, relative_path)
 
 def main():
     # Get the path to the Excel file
-    excel_file = "D:\dbtest\YPF 8in x 10km Jet Fuel Pipeline Poliducto La Matanza to Aeroplanta Ezeiza UTMC List Pipe Tally_Rev.03.xlsx"
-    # if len(sys.argv) < 2:
-    #     print("Error: No file path provided")
-    #     return
+    # excel_file = "D:\dbtest\YPF 8in Save.xlsx"
+    # excel_file = "D:\dbtest\PlusPetrol_Argentina_12inch_82km_UTMC List of Pipe Tally_Rev01 1.xlsx"
+    
+    # excel_file = "D:\dbtest\Plus_Save.xlsx"
+    if len(sys.argv) < 2:
+        print("Error: No file path provided")
+        return
 
-    # excel_file = sys.argv[1]
+    excel_file = sys.argv[1]
     
     if  excel_to_sqlite(excel_file) :
         print("Msg: Conversion completed successfully.")
-    # else:
-    #     print("Conversion completed with errors.")
-
+    
+    #test function
+    # nomThickColumns =["drink", "water", "apple" , "sumsung"]
+    # data = ["num1", "nm3", "Test", "applePO",  "sumsang", "apple"]
+    # message, misspelled, true_extra, missing = compare_arrays_with_alert(nomThickColumns, data) 
+    # print(f"Extra columns : {', '.join(true_extra)}" )
+    # print(f"Misspelled columns: {', '.join(misspelled)}"  )
+    # print(f"Missing columns: {', '.join(missing)}"  )
       
 if __name__ == "__main__":
     main()
