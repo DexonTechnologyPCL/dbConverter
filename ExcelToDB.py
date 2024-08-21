@@ -310,7 +310,6 @@ def excel_to_sqlite(excel_file):
     finally:
         conn.close()
 
-
 def main():
     # Get the path to the Excel file
     # excel_file = "D:\dbtest\YPF 8in Save.xlsx"
