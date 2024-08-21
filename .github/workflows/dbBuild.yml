@@ -39,7 +39,7 @@ jobs:
           
       - name: Compile the Script
         run: |
-          pyinstaller --onefile ExcelToDB.py
+          pyinstaller --name=ExcelToDB --onefile --add-data "resoure\header.xlsx;resoure" ExcelToDB.py
 
       - name: Delete existing release
         shell: pwsh
