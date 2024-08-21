@@ -199,9 +199,8 @@ def resource_path(relative_path):
 
 def excel_to_sqlite(excel_file):
 ###################################### Get Column Header ##########################################
-    missing_in_df = True
-    # check_List_Pipe = False
-    # check_List_Nominal = False
+    check_List_Pipe = False
+    check_List_Nominal = False
     pipeTallyColumns = []  
     nomThickColumns = []
     headfile = resource_path("resoure\header.xlsx")
@@ -232,76 +231,85 @@ def excel_to_sqlite(excel_file):
     # Create a connection to the SQLite database
     db_file = os.path.splitext(excel_file)[0] + ".db"
     conn = sqlite3.connect(db_file)
-    
-    # Read the Excel file
-    xls = pd.ExcelFile(excel_file)
-    # Loop through each sheet in the Excel file
-    total_sheets = len(xls.sheet_names)
-    # for sheet_name in xls.sheet_names:
-    for i, sheet_name in enumerate(xls.sheet_names, 1):
-        df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
-        # Set specific columns as headers
-        df = set_specific_headers(df, sheet_name)
-        # Add the ERF flag
-          
-        if (sheet_name == "List of Pipe Tally") :
-            check_List_Pipe = True #Check have List of Pipe Tally
+    try:
+        # Read the Excel file
+        xls = pd.ExcelFile(excel_file)
+        # Loop through each sheet in the Excel file
+        total_sheets = len(xls.sheet_names)
+        # for sheet_name in xls.sheet_names:
+        for i, sheet_name in enumerate(xls.sheet_names, 1):
+            df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+            # Set specific columns as headers
+            df = set_specific_headers(df, sheet_name)
+            # Add the ERF flag
+            
+            if (sheet_name == "List of Pipe Tally") :
+                check_List_Pipe = True #Check have List of Pipe Tally
+                    
+                df = add_erf_type(df) 
                 
-            df = add_erf_type(df) 
-            
-            # Drop the isNormalERF column if it exists
-            if 'isNormalERF' in df.columns:
-                df = df.drop(columns=['isNormalERF'])
-            df = convert_data_types(df)
-            
-            message, misspelled, true_extra, missing  = compare_arrays_with_alert(pipeTallyColumns, df.columns)
-            if message != 'OK' :
-                if(len(misspelled) > 0 or len(missing) > 0):
-                    print(f"Error: The sheet {sheet_name} is |" 
-                            f"Misspelled columns: {', '.join(misspelled)} |" 
-                            f"Missing columns: {', '.join(missing)}" )
-                    return False
-                if(len(true_extra) > 0):
-                    print(f"Warning: The sheet {sheet_name} is |" 
-                            f"Extra columns : {', '.join(true_extra)}" )
-                    df.to_sql(sheet_name, conn, if_exists= 'replace', index=False) 
-            else:
-            # Write the DataFrame to the SQLite database
-                df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
-            
-        if (sheet_name == "List of Nominal Wall Thickness"):    
-            check_List_Nominal = True
-            message, misspelled, true_extra, missing = compare_arrays_with_alert(nomThickColumns, df.columns) 
-            if message != 'OK' :
-                if(len(misspelled) > 0 or len(missing) > 0):
-                    print(f"Error: The sheet {sheet_name} is |"  
-                            f"Misspelled columns: {', '.join(misspelled)} |"  
-                            f"Missing columns: {', '.join(missing)}"  )
-                    return False
-                if(len(true_extra) > 0):
-                    print(f"Warning: The sheet {sheet_name} is |" 
-                            f"Extra columns : {', '.join(true_extra)}" )
+                # Drop the isNormalERF column if it exists
+                if 'isNormalERF' in df.columns:
+                    df = df.drop(columns=['isNormalERF'])
+                df = convert_data_types(df)
+                
+                message, misspelled, true_extra, missing  = compare_arrays_with_alert(pipeTallyColumns, df.columns)
+                if message != 'OK' :
+                    if(len(misspelled) > 0 or len(missing) > 0):
+                        raise ValueError(f"Error: The sheet '{sheet_name}' is |" 
+                                f"Misspelled columns: {', '.join(misspelled)} |" 
+                                f"Missing columns: {', '.join(missing)}")
+                    if(len(true_extra) > 0):
+                        print(f"Warning: The sheet '{sheet_name}' is |" 
+                                f"Extra columns : {', '.join(true_extra)}" )
+                        df.to_sql(sheet_name, conn, if_exists= 'replace', index=False) 
+                else:
+                # Write the DataFrame to the SQLite database
+                    df.to_sql(sheet_name, conn, if_exists='replace', index=False) # Insert data into SQLite in bulk
+                
+            if (sheet_name == "List of Nominal Wall Thickness"):    
+                check_List_Nominal = True
+                message, misspelled, true_extra, missing = compare_arrays_with_alert(nomThickColumns, df.columns) 
+                if message != 'OK' :
+                    if(len(misspelled) > 0 or len(missing) > 0):
+                        raise ValueError(f"Error: The sheet '{sheet_name}' is |"  
+                                f"Misspelled columns: {', '.join(misspelled)} |"  
+                                f"Missing columns: {', '.join(missing)}")
+                    if(len(true_extra) > 0):
+                        print(f"Warning: The sheet '{sheet_name}' is |" 
+                                f"Extra columns : {', '.join(true_extra)}" )
+                        df.to_sql(sheet_name, conn, if_exists='replace', index=False) 
+                else:
                     df.to_sql(sheet_name, conn, if_exists='replace', index=False) 
-            else:
-                df.to_sql(sheet_name, conn, if_exists='replace', index=False) 
-                
-        # Report progress after processing each sheet
-        progress = int((i / total_sheets) * 100)
-        print(f"PROGRESS:{progress}", flush=True)
-    
-    
-    if(check_List_Pipe == False):
-        print(f"Error: The sheet List of Pipe Tally is missing")
-        return False
-    if(check_List_Nominal ==False):
-        print(f"Error: The sheet List of Nominal Wall Thickness is missing")
-        return False
+                    
+            # Report progress after processing each sheet
+            progress = int((i / total_sheets) * 100)
+            print(f"PROGRESS:{progress}", flush=True)
         
-    # Commit and close the connection
-    conn.commit()
-    conn.close()
+        # ERROR sheet missing
+        if(check_List_Pipe == False):
+            # print(f"Error: The sheet "'"List of Pipe Tally"'" is missing")
+            raise ValueError("The sheet 'List of Pipe Tally' is missing")
+          
+        if(check_List_Nominal ==False):
+            # print(f"Error: The sheet "'"List of Nominal Wall Thickness"'" is missing")
+            raise ValueError("The sheet 'List of Nominal Wall Thickness' is missing")
+            
+    
+        conn.commit()
+        return True
+    
+    except Exception as e:
+        # if error it remove .db file
+        print(f"Error: {str(e)}")
+        conn.close()
+        if os.path.exists(db_file):
+            os.remove(db_file)
+        return False
 
-    return True
+    finally:
+        conn.close()
+
 
 def main():
     # Get the path to the Excel file
