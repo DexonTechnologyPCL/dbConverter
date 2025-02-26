@@ -196,8 +196,7 @@ def create_access_table(cursor, table_name, df):
         
         # Rename columns in the DataFrame
         df.columns = [column_map[col] for col in df.columns]
-        
-        print(f"Table '{table_name}' created successfully")
+
         return True, df
 
     # Method 2: Set all columns as TEXT
@@ -212,7 +211,6 @@ def create_access_table(cursor, table_name, df):
                 columns.append(f"[{clean_col}] TEXT(255)")
             
             create_table_sql = f"CREATE TABLE [{table_name}] ({', '.join(columns)})"
-            print(f"Trying alternative approach with SQL: {create_table_sql}")
             cursor.execute(create_table_sql)
             cursor.commit()
             
@@ -222,7 +220,6 @@ def create_access_table(cursor, table_name, df):
             print(f"Table '{table_name}' created successfully with alternate method")
             return True, df
         except Exception as e2:
-            print(f"Error with alternative approach: {str(e2)}")
             raise Exception(f"Failed to create table: {str(e2)}")
 
 def insert_data_to_access(cursor, table_name, df):
@@ -240,7 +237,7 @@ def insert_data_to_access(cursor, table_name, df):
         placeholders = ", ".join(["?" for _ in range(len(df.columns))])
         sql_insert = f"INSERT INTO [{table_name}] ({column_names}) VALUES ({placeholders})"
         
-        print(f"Insert SQL: {sql_insert}")
+        # print(f"Insert SQL: {sql_insert}")
         
         inserted_count = 0
         skipped_count = 0
@@ -267,14 +264,10 @@ def insert_data_to_access(cursor, table_name, df):
                     inserted_count += 1
                 except Exception as e:
                     print(f"Error inserting row: {str(e)}")
-                    print(f"Row values: {values}")
                     skipped_count += 1
                     continue
             
             cursor.commit()
-            print(f"Inserted rows {start_idx+1} to {end_idx} of {total_rows}")
-        
-        print(f"Total rows inserted: {inserted_count}, skipped: {skipped_count}")
         return True
     
     except Exception as e:
@@ -299,7 +292,6 @@ def create_access_database(file_path):
         conn_str = f'Provider=Microsoft.ACE.OLEDB.12.0;Data Source={file_path};'
         cat.Create(conn_str)
         cat = None
-        print(f"Created database successfully using ADOX: {file_path}")
         return True
     except Exception as e:
         print(f"Error creating Access database: {str(e)}")
@@ -321,33 +313,31 @@ def create_access_database(file_path):
 def convert_data_types(df):
     """Convert data types of specific columns."""
 
-    if "Log distance (m)" in df.columns:
-        df["Log distance (m)"] = pd.to_numeric(df["Log distance (m)"], errors='coerce').round(3)
+    if "Log distance [m]" in df.columns:
+        df["Log distance [m]"] = pd.to_numeric(df["Log distance [m]"], errors='coerce').round(3)
     
     # List of columns to process for three decimal places
-    columns_three_decimal = ["Altitude (m)", "Joint / component length [m]", "Abs Dist to upstream weld (m)", "Remaining thickness (mm)"]
+    columns_three_decimal = ["Altitude [m]", "Joint / component length [m]", "Abs. Dist. to upstream weld [m]", "Remaining thickness [mm]"]
     
     for col in columns_three_decimal:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').round(3).apply(lambda x: f"{x:.3f}" if pd.notnull(x) else None)
 
-    columns_two_decimal = ["Nominal Internal diameter (mm)", "Max depth (mm)"]
+    columns_two_decimal = ["Nominal Internal diameter [mm]", "Max. depth [mm]"]
     
     for col in columns_two_decimal:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round_two_decimal).apply(lambda x: f"{x:.2f}" if pd.notnull(x) else None)
 
-    if "Max depth (%)" in df.columns:
-        df["Max depth (%)"] = df["Max depth (%)"].apply(custom_round_max_depth)
+    if "Max. depth [%]" in df.columns:
+        df["Max. depth [%]"] = df["Max. depth [%]"].apply(custom_round_max_depth)
 
-    numeric_columns_to_round = ["Length (mm)", "Width (mm)"]
-
+    numeric_columns_to_round = ["Length [mm]", "Width [mm]"]
     for col in numeric_columns_to_round:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round).apply(lambda x: str(int(x)) if pd.notnull(x) else None)
-
     for col in df.columns:
-        if col not in ["Log distance (m)"] + columns_three_decimal + columns_two_decimal + numeric_columns_to_round + ["Max. depth (%)"]:
+        if col not in ["Log distance [m]"] + columns_three_decimal + columns_two_decimal + numeric_columns_to_round + ["Max. depth [%]"]:
             df[col] = df[col].astype(str).replace({'nan': None, 'None': None, '': None}).where(pd.notnull(df[col]), None)
  
     return df
@@ -395,12 +385,7 @@ def excel_to_access(excel_file, header_file=None):
     # Use `header_file` if specified; otherwise, use default values
     if header_file is None:
         header_file = resource_path("resoure\\header.xlsx")
-    
-    # Verify the source Excel file
-    if not os.path.exists(excel_file):
-        print(f"Error: The file {excel_file} does not exist.")
-        return False
-    
+
     # Create or connect to the Access database
     access_file = os.path.splitext(excel_file)[0] + ".accdb"
     
@@ -409,15 +394,11 @@ def excel_to_access(excel_file, header_file=None):
         print("Error: Failed to create Access database.")
         return False
     
-    # Connect to the Access database
-    conn = None
-    try:
-        conn_str = f'DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={access_file};'
-        conn = pyodbc.connect(conn_str, autocommit=False)
-        cursor = conn.cursor()
-    except Exception as e:
-        print(f"Error connecting to Access database: {str(e)}")
-        return False
+    # # Connect to the Access database
+    conn        = None
+    conn_str    = f'DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={access_file};'
+    conn        = pyodbc.connect(conn_str, autocommit=False)
+    cursor      = conn.cursor()
     
     # Read the Excel file and transform the data
     try:
@@ -492,14 +473,7 @@ def excel_to_access(excel_file, header_file=None):
            
             progress = int((i / total_sheets) * 100)
             print(f"PROGRESS:{progress}", flush=True)
-        
-        # Check if all required sheets are present
-        if not check_List_Pipe:
-            print("Warning: The sheet 'List of Pipe Tally' is missing")
-        
-        if not check_List_Nominal:
-            print("Warning: The sheet 'List of Nominal Wall Thickness' is missing")
-        
+       
         conn.commit()
         print("Excel to Access conversion completed successfully")
         return True
@@ -529,7 +503,8 @@ def excel_to_access(excel_file, header_file=None):
 
 def main():
     if len(sys.argv) < 2:
-        excel_file = "D:\\PlusPetrol_Test.xlsx"
+        # excel_file = "D:\\PlusPetrol_Test.xlsx"
+        excel_file = "D:\PlusPetrol_Argentina_12inch_82km_UTMC List of Pipe Tally_Rev01.xlsx"
         print(f"No file path provided, using default: {excel_file}")
     else:
         excel_file = sys.argv[1]
