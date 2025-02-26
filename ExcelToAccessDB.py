@@ -10,6 +10,7 @@ import re
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
     except Exception:
         base_path = os.path.abspath(".")
@@ -21,9 +22,10 @@ def set_specific_headers(df, sheetname):
     df = df.copy()
     
     # Extract the first two rows which may contain header information
-    first_row = df.iloc[0].ffill().tolist()
-    second_row = df.iloc[1].ffill().tolist()
+    first_row   = df.iloc[0].ffill().tolist()
+    second_row  = df.iloc[1].ffill().tolist()
 
+    # Combine the rows to create the headers
     headers = []
     for i in range(len(second_row)):
         if pd.notna(second_row[i]) and second_row[i].strip() != '':
@@ -31,12 +33,12 @@ def set_specific_headers(df, sheetname):
         elif pd.notna(first_row[i]) and first_row[i].strip() != '':
             headers.append(first_row[i].strip())
         else:
-            headers.append(f"Unnamed_{i}")  
+            headers.append(f"Unnamed_{i}")  # Assign a placeholder for truly empty headers
 
     # Set the last column name to 'Comments' unless it's the 'List of Nominal Wall Thickness' sheet.
     if sheetname != "List of Nominal Wall Thickness":
         if "Comments" not in headers and len(headers) > 1:
-            headers[-1] = "Comments"
+            headers[-1] = "Comments"        # Forcefully assign if missing
     
     # Ensure all headers are strings and unique
     unique_headers = []
@@ -66,9 +68,9 @@ def custom_round_max_depth(x):
         if abs(float_x - round(float_x, 1)) > 0.00001:
             return str(round(float_x))
         else:
-            return str(float_x)  # Keep original precision for 1 or 0 decimal places
+            return str(float_x) # Keep original precision for 1 or 0 decimal places
     except ValueError:
-        return str(x)  # Keep as is if it's not a number
+        return str(x)           # Keep as is if it's not a number
     
 def custom_round_two_decimal(x):
     """Custom rounding function to two decimal places."""
@@ -130,18 +132,16 @@ def compare_arrays_with_alert(temp, data):
     return  message, misspelled, true_extra, list(missing)
 
 def clean_column_name(column_name):
-    clean_name = column_name.replace('[', '(').replace(']', ')')
-    
-    clean_name = clean_name.replace('.', '')
-    
-    for char in ['!', '`', '\'', '"', '@', '#', '$', '^', '&', '*', '+', '=', ':', ',', ';', '<', '>', '\\', '|', '?']:
-        clean_name = clean_name.replace(char, '_')
-    
-    clean_name = clean_name[:64]
-    
+    """Modify column names to be compatible with Access"""
+    clean_name = column_name.replace('[', '(').replace(']', ')')    # Replace square brackets [] with parentheses ()
+    clean_name = clean_name.replace('.', '')                        # Remove '.'
+    clean_name = clean_name[:64]                                    # Trim names if they exceed the length limit (Access restriction)
+   
     return clean_name
 
 def get_access_data_type(df_column):
+    """ Assign appropriate data types for columns in Access"""
+
     if pd.api.types.is_float_dtype(df_column):
         return "DOUBLE"
     elif pd.api.types.is_integer_dtype(df_column):
@@ -151,6 +151,7 @@ def get_access_data_type(df_column):
     elif pd.api.types.is_datetime64_dtype(df_column):
         return "DATETIME"
     else:
+        # Check the maximum length of data in the column
         max_length = 0
         for val in df_column:
             if isinstance(val, str) and len(val) > max_length:
@@ -162,35 +163,44 @@ def get_access_data_type(df_column):
             return "TEXT(255)"
 
 def create_access_table(cursor, table_name, df):
+    """Create a table in Access with appropriate data types"""
     try:
         try:
+            # Delete the existing table if it exists
             cursor.execute(f"DROP TABLE [{table_name}]")
             cursor.commit()
             print(f"Dropped existing table: {table_name}")
         except:
-            pass  
+            pass  # No table found, proceed with the process
         
+        # Create a dictionary to store column name replacements
         column_map = {}
         for col in df.columns:
             clean_col = clean_column_name(col)
             column_map[col] = clean_col
-        
+
+        # Generate SQL statement for creating the table
         columns = []
         for col in df.columns:
             clean_col = column_map[col]
             data_type = get_access_data_type(df[col])
             columns.append(f"[{clean_col}] {data_type}")
         
+        # Generate SQL statement
         create_table_sql = f"CREATE TABLE [{table_name}] ({', '.join(columns)})"
         
+        # Execute table creation
         print(f"Creating table with SQL: {create_table_sql}")
         cursor.execute(create_table_sql)
         cursor.commit()
         
+        # Rename columns in the DataFrame
         df.columns = [column_map[col] for col in df.columns]
         
         print(f"Table '{table_name}' created successfully")
         return True, df
+
+    # Method 2: Set all columns as TEXT
     except Exception as e:
         print(f"Error creating table: {str(e)}")
         print(f"SQL: {create_table_sql}")
@@ -206,6 +216,7 @@ def create_access_table(cursor, table_name, df):
             cursor.execute(create_table_sql)
             cursor.commit()
             
+            # Rename columns in the DataFrame table
             df.columns = [column_map[col] for col in df.columns]
             
             print(f"Table '{table_name}' created successfully with alternate method")
@@ -215,8 +226,9 @@ def create_access_table(cursor, table_name, df):
             raise Exception(f"Failed to create table: {str(e2)}")
 
 def insert_data_to_access(cursor, table_name, df):
-
+    """Import data from the DataFrame into the Access table"""
     try:
+        # Process data in batches
         batch_size = 50
         total_rows = len(df)
         
@@ -238,6 +250,8 @@ def insert_data_to_access(cursor, table_name, df):
             batch_df = df.iloc[start_idx:end_idx]
             
             for _, row in batch_df.iterrows():
+                
+                # Convert None and empty values to None for all columns
                 values = []
                 for val in row:
                     if pd.isna(val) or val == "" or val == "None" or val is None:
@@ -245,6 +259,7 @@ def insert_data_to_access(cursor, table_name, df):
                     elif isinstance(val, (int, float, bool)):
                         values.append(val)
                     else:
+                        # Convert to string and truncate length
                         values.append(str(val)[:255] if val is not None else None)
                 
                 try:
@@ -267,6 +282,9 @@ def insert_data_to_access(cursor, table_name, df):
         raise
 
 def create_access_database(file_path):
+    """Create a new Access database"""
+
+    # Delete the existing file if it exists
     if os.path.exists(file_path):
         try:
             os.remove(file_path)
@@ -276,6 +294,7 @@ def create_access_database(file_path):
             return False
     
     try:
+        # Method 1: Use ADOX
         cat = win32com.client.Dispatch('ADOX.Catalog')
         conn_str = f'Provider=Microsoft.ACE.OLEDB.12.0;Data Source={file_path};'
         cat.Create(conn_str)
@@ -285,12 +304,16 @@ def create_access_database(file_path):
     except Exception as e:
         print(f"Error creating Access database: {str(e)}")
         
+        # Method 2: Create an empty database
         try:
+            # Create an empty Access file
             conn_str = f'DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={file_path};'
             conn = pyodbc.connect(conn_str, autocommit=True)
             conn.close()
+
             print(f"Created database using alternative method: {file_path}")
             return True
+
         except Exception as e2:
             print(f"Error with alternative approach: {str(e2)}")
             return False
@@ -298,33 +321,33 @@ def create_access_database(file_path):
 def convert_data_types(df):
     """Convert data types of specific columns."""
 
-    if "Log distance [m]" in df.columns:
-        df["Log distance [m]"] = pd.to_numeric(df["Log distance [m]"], errors='coerce').round(3)
+    if "Log distance (m)" in df.columns:
+        df["Log distance (m)"] = pd.to_numeric(df["Log distance (m)"], errors='coerce').round(3)
     
     # List of columns to process for three decimal places
-    columns_three_decimal = ["Altitude [m]", "Joint / component length [m]", "Abs. Dist. to upstream weld [m]", "Remaining thickness [mm]"]
+    columns_three_decimal = ["Altitude (m)", "Joint / component length [m]", "Abs Dist to upstream weld (m)", "Remaining thickness (mm)"]
     
     for col in columns_three_decimal:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').round(3).apply(lambda x: f"{x:.3f}" if pd.notnull(x) else None)
 
-    columns_two_decimal = ["Nominal Internal diameter [mm]", "Max. depth [mm]"]
+    columns_two_decimal = ["Nominal Internal diameter (mm)", "Max depth (mm)"]
     
     for col in columns_two_decimal:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round_two_decimal).apply(lambda x: f"{x:.2f}" if pd.notnull(x) else None)
 
-    if "Max. depth [%]" in df.columns:
-        df["Max. depth [%]"] = df["Max. depth [%]"].apply(custom_round_max_depth)
+    if "Max depth (%)" in df.columns:
+        df["Max depth (%)"] = df["Max depth (%)"].apply(custom_round_max_depth)
 
-    numeric_columns_to_round = ["Length [mm]", "Width [mm]"]
+    numeric_columns_to_round = ["Length (mm)", "Width (mm)"]
 
     for col in numeric_columns_to_round:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round).apply(lambda x: str(int(x)) if pd.notnull(x) else None)
 
     for col in df.columns:
-        if col not in ["Log distance [m]"] + columns_three_decimal + columns_two_decimal + numeric_columns_to_round + ["Max. depth [%]"]:
+        if col not in ["Log distance (m)"] + columns_three_decimal + columns_two_decimal + numeric_columns_to_round + ["Max. depth (%)"]:
             df[col] = df[col].astype(str).replace({'nan': None, 'None': None, '': None}).where(pd.notnull(df[col]), None)
  
     return df
@@ -334,14 +357,14 @@ def add_erf_type(df):
 
     if 'ERF (Modified)' in df.columns and 'ERF (metal loss)' in df.columns:
 
-        position = df.columns.get_loc('ERF (Modified)')        #It finds the position of 'ERF (Modified)' column.
+        position = df.columns.get_loc('ERF (Modified)')                     #It finds the position of 'ERF (Modified)' column.
 
         #Creates a new 'ERF' column, using 'ERF (Modified)' values if they're not null, otherwise using 'ERF (metal loss)' values.
         df['ERF'] = df.apply(lambda row: row['ERF (Modified)'] if pd.notnull(row['ERF (Modified)']) else row['ERF (metal loss)'], axis=1)
         df.insert(position, 'ERF', df.pop('ERF'))                           #Inserts the new 'ERF' column at the position of 'ERF (Modified)'.
 
         df['isNormalERF'] = df['ERF (metal loss)'].notnull()                #Creates an 'isNormalERF' column, which is True where 'ERF (metal loss)' is not null.
-        df = df.drop(columns = ['ERF (Modified)', 'ERF (metal loss)'])        #Drops the original 'ERF (Modified)' and 'ERF (metal loss)' columns.
+        df = df.drop(columns = ['ERF (Modified)', 'ERF (metal loss)'])      #Drops the original 'ERF (Modified)' and 'ERF (metal loss)' columns.
 
     elif 'ERF (Modified)' in df.columns:
         position = df.columns.get_loc('ERF (Modified)')
@@ -369,19 +392,24 @@ def excel_to_access(excel_file, header_file=None):
     pipeTallyColumns = []  
     nomThickColumns = []
     
+    # Use `header_file` if specified; otherwise, use default values
     if header_file is None:
         header_file = resource_path("resoure\\header.xlsx")
     
+    # Verify the source Excel file
     if not os.path.exists(excel_file):
         print(f"Error: The file {excel_file} does not exist.")
         return False
     
+    # Create or connect to the Access database
     access_file = os.path.splitext(excel_file)[0] + ".accdb"
     
+    # Create a new Access database
     if not create_access_database(access_file):
         print("Error: Failed to create Access database.")
         return False
     
+    # Connect to the Access database
     conn = None
     try:
         conn_str = f'DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={access_file};'
@@ -391,11 +419,13 @@ def excel_to_access(excel_file, header_file=None):
         print(f"Error connecting to Access database: {str(e)}")
         return False
     
+    # Read the Excel file and transform the data
     try:
         xls = pd.ExcelFile(excel_file)
         total_sheets = len(xls.sheet_names)
         
         try:
+            # Read the header file if it exists
             if os.path.exists(header_file):
                 xlsHead = pd.ExcelFile(header_file)
                 for sheet_name in xlsHead.sheet_names:
@@ -411,6 +441,7 @@ def excel_to_access(excel_file, header_file=None):
         except Exception as e:
             print(f"Warning: Error reading header file: {str(e)}")
         
+        # Process each sheet in the Excel file
         for i, sheet_name in enumerate(xls.sheet_names, 1):
             print(f"Processing sheet: {sheet_name}")
             df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
@@ -425,6 +456,7 @@ def excel_to_access(excel_file, header_file=None):
                 
                 df = convert_data_types(df)
 
+                # Check against `pipeTallyColumns` if defined
                 if len(pipeTallyColumns) > 0:
                     message, misspelled, true_extra, missing = compare_arrays_with_alert(pipeTallyColumns, df.columns)
                     if message != 'OK':
@@ -439,6 +471,8 @@ def excel_to_access(excel_file, header_file=None):
             
             if sheet_name == "List of Nominal Wall Thickness":
                 check_List_Nominal = True
+
+                # Check against `nomThickColumns` if defined
                 if len(nomThickColumns) > 0:
                     message, misspelled, true_extra, missing = compare_arrays_with_alert(nomThickColumns, df.columns)
                     if message != 'OK':
@@ -451,6 +485,7 @@ def excel_to_access(excel_file, header_file=None):
                         if len(true_extra) > 0:
                             print(f"Info: Extra columns in '{sheet_name}': {', '.join(true_extra)}")
             
+            # Create tables and import data
             success, df = create_access_table(cursor, sheet_name, df)
             if success:
                 insert_data_to_access(cursor, sheet_name, df)
@@ -458,6 +493,7 @@ def excel_to_access(excel_file, header_file=None):
             progress = int((i / total_sheets) * 100)
             print(f"PROGRESS:{progress}", flush=True)
         
+        # Check if all required sheets are present
         if not check_List_Pipe:
             print("Warning: The sheet 'List of Pipe Tally' is missing")
         
@@ -473,6 +509,7 @@ def excel_to_access(excel_file, header_file=None):
         if conn:
             conn.rollback()
         
+        # Delete the created database if an error occurs
         if os.path.exists(access_file):
             try:
                 if conn:
@@ -497,6 +534,7 @@ def main():
     else:
         excel_file = sys.argv[1]
     
+    # Call the function to convert Excel to Access
     if excel_to_access(excel_file):
         print("Msg: Conversion completed successfully.")
     else:
