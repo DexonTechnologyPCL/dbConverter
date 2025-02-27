@@ -32,6 +32,7 @@ jobs:
           pip install pandas
           pip install numpy
           pip install openpyxl
+          pip install pyodbc
       
       - name: Install GitHub CLI
         run: |
