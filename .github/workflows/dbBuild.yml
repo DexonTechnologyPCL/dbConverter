@@ -33,6 +33,7 @@ jobs:
           pip install numpy
           pip install openpyxl
           pip install pyodbc
+          pip install pywin32
       
       - name: Install GitHub CLI
         run: |
