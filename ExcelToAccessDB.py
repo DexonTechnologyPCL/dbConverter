@@ -4,8 +4,126 @@ import pyodbc
 import os
 import sys
 import openpyxl
-import win32com.client
 import re
+import subprocess
+import ctypes
+from ctypes import wintypes
+
+
+def create_empty_accdb(file_path):
+    """Create an empty .accdb file using JET/ACE engine via ctypes"""
+    try:
+        # Ensure the directory exists
+        directory = os.path.dirname(os.path.abspath(file_path))
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        # Make sure file doesn't exist
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                print(f"Removed existing database: {file_path}")
+            except Exception as e:
+                print(f"Warning: Could not remove existing file: {str(e)}")
+                return False
+
+        # Load the ACE DLL
+        try:
+            acedb = ctypes.windll.LoadLibrary("acecore.dll")
+            print("Loaded acecore.dll")
+        except:
+            try:
+                # Try alternate DLL names that might be available
+                acedb = ctypes.windll.LoadLibrary("msjetoledb40.dll")
+                print("Loaded msjetoledb40.dll")
+            except:
+                try:
+                    acedb = ctypes.windll.LoadLibrary("msjet40.dll")
+                    print("Loaded msjet40.dll")
+                except:
+                    # Final fallback: try to create it by running a VBA script 
+                    # through an external process
+                    return create_access_with_vbscript(file_path)
+
+        # Define error checking function
+        def check_result(result, func, args):
+            if result != 0:
+                raise ctypes.WinError(result)
+            return result
+
+        # Get JetCreateDatabase function
+        create_db_func = acedb.JetCreateDatabase
+        create_db_func.argtypes = [ctypes.c_wchar_p, ctypes.c_void_p]
+        create_db_func.restype = ctypes.c_ulong
+        create_db_func.errcheck = check_result
+
+        # Call the function to create the database
+        result = create_db_func(file_path, None)
+        print(f"Successfully created database: {file_path}")
+        return True
+
+    except Exception as e:
+        print(f"Error creating database with ctypes: {str(e)}")
+        
+        # Try fallback approach
+        return create_access_with_vbscript(file_path)
+
+def create_access_with_vbscript(file_path):
+    """Create an Access database using VBScript as a fallback"""
+    try:
+        # Create a temporary VBScript file
+        vbs_path = os.path.join(os.path.dirname(file_path), "create_db.vbs")
+        
+        # Write the VBScript content
+        with open(vbs_path, "w") as f:
+            f.write(f'''
+Set objCatalog = CreateObject("ADOX.Catalog")
+objCatalog.Create "Provider=Microsoft.ACE.OLEDB.12.0;Data Source={file_path}"
+Set objCatalog = Nothing
+''')
+        
+        # Run the VBScript
+        subprocess.run(["cscript", "//NoLogo", vbs_path], check=True)
+        
+        # Remove the temporary script
+        os.remove(vbs_path)
+        
+        print(f"Successfully created database with VBScript: {file_path}")
+        return True
+    
+    except Exception as e:
+        print(f"Error creating database with VBScript: {str(e)}")
+        
+        # Try one more approach
+        return create_access_with_powershell(file_path)
+
+def create_access_with_powershell(file_path):
+    """Create an Access database using PowerShell as a final fallback"""
+    try:
+        # Create a temporary PowerShell script
+        ps_path = os.path.join(os.path.dirname(file_path), "create_db.ps1")
+        
+        # Write the PowerShell script content
+        with open(ps_path, "w") as f:
+            f.write(f'''
+$connectionString = "Provider=Microsoft.ACE.OLEDB.12.0;Data Source={file_path};"
+$adoxCatalog = New-Object -ComObject ADOX.Catalog
+$adoxCatalog.Create($connectionString)
+[System.Runtime.InteropServices.Marshal]::ReleaseComObject($adoxCatalog) | Out-Null
+''')
+        
+        # Run the PowerShell script
+        subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", ps_path], check=True)
+        
+        # Remove the temporary script
+        os.remove(ps_path)
+        
+        print(f"Successfully created database with PowerShell: {file_path}")
+        return True
+    
+    except Exception as e:
+        print(f"Error creating database with PowerShell: {str(e)}")
+        return False
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -276,39 +394,9 @@ def insert_data_to_access(cursor, table_name, df):
 
 def create_access_database(file_path):
     """Create a new Access database"""
-
-    # Delete the existing file if it exists
-    if os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-            print(f"Removed existing database: {file_path}")
-        except Exception as e:
-            print(f"Warning: Could not remove existing file: {str(e)}")
-            return False
     
-    try:
-        # Method 1: Use ADOX
-        cat = win32com.client.Dispatch('ADOX.Catalog')
-        conn_str = f'Provider=Microsoft.ACE.OLEDB.12.0;Data Source={file_path};'
-        cat.Create(conn_str)
-        cat = None
-        return True
-    except Exception as e:
-        print(f"Error creating Access database: {str(e)}")
-        
-        # Method 2: Create an empty database
-        try:
-            # Create an empty Access file
-            conn_str = f'DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={file_path};'
-            conn = pyodbc.connect(conn_str, autocommit=True)
-            conn.close()
-
-            print(f"Created database using alternative method: {file_path}")
-            return True
-
-        except Exception as e2:
-            print(f"Error with alternative approach: {str(e2)}")
-            return False
+    # Use the ctypes implementation to create the database
+    return create_empty_accdb(file_path)
 
 def convert_data_types(df):
     """Convert data types of specific columns."""
@@ -504,7 +592,7 @@ def excel_to_access(excel_file, header_file=None):
 def main():
     if len(sys.argv) < 2:
         # excel_file = "D:\\PlusPetrol_Test.xlsx"
-        excel_file = "D:\PlusPetrol_Argentina_12inch_82km_UTMC List of Pipe Tally_Rev01.xlsx"
+        # excel_file = "D:\PlusPetrol_Argentina_12inch_82km_UTMC List of Pipe Tally_Rev01.xlsx"
         print(f"No file path provided, using default: {excel_file}")
     else:
         excel_file = sys.argv[1]
