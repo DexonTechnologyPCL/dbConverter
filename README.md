@@ -1,1 +1,1 @@
-# dbConverter
+# dbConverter SQLite
