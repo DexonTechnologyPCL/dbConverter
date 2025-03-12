@@ -464,6 +464,94 @@ def add_erf_type(df):
         df['isNormalERF'] = True
     return df
 
+def add_new_columns_to_pipe_tally(df):
+    """Add 3 new columns in the DataFrame of List of Pipe Tally"""
+    # Add 3 new columns with default values
+    df['Velocity (m/s)'] = None 
+    df['ImgPath1'] = None
+    df['ImgPath2'] = None
+    
+    return df
+
+def create_new_tables(cursor):
+    """Create 4 new tables that do not exist in Excel"""
+    # Create table Velocity
+    try:
+        cursor.execute("""CREATE TABLE [Velocity] (
+                                        [Log distance (m)] DOUBLE,
+                                        [Velocity (m/min)] DOUBLE,
+                                        [Velocity (m/sec)] DOUBLE,
+                                        [Feature] DOUBLE) 
+                                        """)
+        cursor.commit()
+        print("Successfully created table Velocity")
+    except Exception as e:
+        print(f"Unable to create table Velocity: {str(e)}")
+    
+    # Create table ClientInspection
+    try:
+        cursor.execute("""CREATE TABLE [ClientInspection] (
+                                        [Project no] TEXT(255),
+                                        [Project] TEXT(255),
+                                        [Client] TEXT(255),
+                                        [Inspection Date] DATETIME,
+                                        [Launcher] TEXT(255),
+                                        [Receiver] TEXT(255),
+                                        [Pipeline Designation] TEXT(255),
+                                        [Product] TEXT(255),
+                                        [Revision] TEXT(255))
+                                        """)
+        cursor.commit()
+        print("Successfully created table ClientInspection")
+    except Exception as e:
+        print(f"Unable to create table ClientInspection: {str(e)}")
+    
+    # Create table PipelineParameters
+    try:
+        cursor.execute("""CREATE TABLE [PipelineParameters] (
+                                        [Outside Diameter] DOUBLE,
+                                        [pipelineMaterial] TEXT(255),
+                                        [NW Thickness] DOUBLE,
+                                        [pipeline Class] TEXT(255),
+                                        [Internal Diameter] DOUBLE,
+                                        [pipe length] DOUBLE,
+                                        [const Code] TEXT(255),
+                                        [Max AlloOperPres] DOUBLE,
+                                        [Design Press] DOUBLE,
+                                        [SMYS] DOUBLE,
+                                        [Design Factor] DOUBLE,
+                                        [Construction Year] INTEGER)
+                                        """)
+        cursor.commit()
+        print("Successfully created table PipelineParameters")
+    except Exception as e:
+        print(f"Unable to create table PipelineParameters: {str(e)}")
+    
+    # Create table DataQuality
+    try:
+        cursor.execute("""CREATE TABLE [DataQuality] (
+                                        [Launching Date] DATETIME,
+                                        [Receiving Date] DATETIME,
+                                        [Duration] DOUBLE,
+                                        [Inspect Medium] TEXT(255),
+                                        [Pres during run] DOUBLE,
+                                        [Flowrate] DOUBLE,
+                                        [Disc CupWear] TEXT(255),
+                                        [Max AlloOperPres] DOUBLE,
+                                        [Debris] TEXT(255),
+                                        [Damage] TEXT(255),
+                                        [start data record] DOUBLE,
+                                        [end data record] DOUBLE,
+                                        [min velocity record] DOUBLE,
+                                        [max velocity record] DOUBLE,
+                                        [size Record] DOUBLE,
+                                        [Date Received Headquarters] DATETIME)
+                                        """)
+        cursor.commit()
+        print("Successfully created table DataQuality")
+    except Exception as e:
+        print(f"Unable to create table DataQuality: {str(e)}")
+
 def excel_to_access(excel_file, header_file=None):
     check_List_Pipe = False
     check_List_Nominal = False
@@ -524,6 +612,7 @@ def excel_to_access(excel_file, header_file=None):
                     df = df.drop(columns=['isNormalERF'])
                 
                 df = convert_data_types(df)
+                df = add_new_columns_to_pipe_tally(df)
 
                 # Check against `pipeTallyColumns` if defined
                 if len(pipeTallyColumns) > 0:
@@ -562,6 +651,8 @@ def excel_to_access(excel_file, header_file=None):
             progress = int((i / total_sheets) * 100)
             print(f"PROGRESS:{progress}", flush=True)
        
+        create_new_tables(cursor)
+
         conn.commit()
         print("Excel to Access conversion completed successfully")
         return True
@@ -593,6 +684,7 @@ def main():
     if len(sys.argv) < 2:
         # excel_file = "D:\\PlusPetrol_Test.xlsx"
         # excel_file = "D:\PlusPetrol_Argentina_12inch_82km_UTMC List of Pipe Tally_Rev01.xlsx"
+
         print(f"No file path provided, using default: {excel_file}")
     else:
         excel_file = sys.argv[1]
