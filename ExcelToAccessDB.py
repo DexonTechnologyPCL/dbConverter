@@ -603,10 +603,10 @@ def excel_to_access(excel_file, header_file=None):
             print(f"Processing sheet: {sheet_name}")
             df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
             df = set_specific_headers(df, sheet_name)
+            df = add_erf_type(df)
             
             if sheet_name == "List of Pipe Tally":
                 check_List_Pipe = True
-                df = add_erf_type(df)
                 
                 if 'isNormalERF' in df.columns:
                     df = df.drop(columns=['isNormalERF'])
