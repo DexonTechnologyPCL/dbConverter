@@ -468,6 +468,7 @@ def add_new_columns_to_pipe_tally(df):
     """Add 3 new columns in the DataFrame of List of Pipe Tally"""
     # Add 3 new columns with default values
     df['Velocity (m/s)'] = None 
+    df['DigSheet'] = None
     df['ImgPath1'] = None
     df['ImgPath2'] = None
     
