@@ -530,6 +530,7 @@ def create_new_tables(cursor):
     # Create table DataQuality
     try:
         cursor.execute("""CREATE TABLE [DataQuality] (
+                                        [Inspection Direction] DOUBLE,
                                         [Launching Date] DATETIME,
                                         [Receiving Date] DATETIME,
                                         [Duration] DOUBLE,
