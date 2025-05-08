@@ -482,7 +482,7 @@ def create_new_tables(cursor):
                                         [Log distance (m)] DOUBLE,
                                         [Velocity (m/min)] DOUBLE,
                                         [Velocity (m/sec)] DOUBLE,
-                                        [Feature] DOUBLE) 
+                                        [Feature] TEXT(255) 
                                         """)
         cursor.commit()
         print("Successfully created table Velocity")
@@ -684,9 +684,6 @@ def excel_to_access(excel_file, header_file=None):
 
 def main():
     if len(sys.argv) < 2:
-        # excel_file = "D:\\PlusPetrol_Test.xlsx"
-        # excel_file = "D:\PlusPetrol_Argentina_12inch_82km_UTMC List of Pipe Tally_Rev01.xlsx"
-
         print(f"No file path provided, using default: {excel_file}")
     else:
         excel_file = sys.argv[1]
