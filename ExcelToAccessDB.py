@@ -482,7 +482,7 @@ def create_new_tables(cursor):
                                         [Log distance (m)] DOUBLE,
                                         [Velocity (m/min)] DOUBLE,
                                         [Velocity (m/sec)] DOUBLE,
-                                        [Feature] TEXT(255) 
+                                        [Feature] TEXT(255))
                                         """)
         cursor.commit()
         print("Successfully created table Velocity")
