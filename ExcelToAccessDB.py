@@ -554,15 +554,188 @@ def create_new_tables(cursor):
     except Exception as e:
         print(f"Unable to create table DataQuality: {str(e)}")
 
-def excel_to_access(excel_file, header_file=None):
+# def excel_to_access(excel_file, header_file=None):
+#     check_List_Pipe = False
+#     check_List_Nominal = False
+#     pipeTallyColumns = []  
+#     nomThickColumns = []
+    
+#     # Use `header_file` if specified; otherwise, use default values
+#     if header_file is None:
+#         header_file = resource_path("resoure\\header.xlsx")
+
+#     # Create or connect to the Access database
+#     access_file = os.path.splitext(excel_file)[0] + ".accdb"
+    
+#     # Create a new Access database
+#     if not create_access_database(access_file):
+#         print("Error: Failed to create Access database.")
+#         return False
+    
+#     # # Connect to the Access database
+#     conn        = None
+#     conn_str    = f'DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={access_file};'
+#     conn        = pyodbc.connect(conn_str, autocommit=False)
+#     cursor      = conn.cursor()
+    
+#     # Read the Excel file and transform the data
+#     try:
+#         xls = pd.ExcelFile(excel_file)
+#         total_sheets = len(xls.sheet_names)
+        
+#         try:
+#             # Read the header file if it exists
+#             if os.path.exists(header_file):
+#                 xlsHead = pd.ExcelFile(header_file)
+#                 for sheet_name in xlsHead.sheet_names:
+#                     dfheader = pd.read_excel(xlsHead, sheet_name=sheet_name, header=None)
+                    
+#                     if sheet_name == "List of Pipe Tally":
+#                         dfheader = GetHeaderColumn(dfheader)
+#                         pipeTallyColumns = dfheader.columns
+                    
+#                     if sheet_name == "List of Nominal Wall Thickness":
+#                         dfheader = GetHeaderColumn(dfheader)
+#                         nomThickColumns = dfheader.columns
+#         except Exception as e:
+#             print(f"Warning: Error reading header file: {str(e)}")
+        
+#         # Process each sheet in the Excel file
+#         for i, sheet_name in enumerate(xls.sheet_names, 1):
+#             print(f"Processing sheet: {sheet_name}")
+#             df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+#             df = set_specific_headers(df, sheet_name)
+#             df = add_erf_type(df)
+            
+#             if sheet_name == "List of Pipe Tally":
+#                 check_List_Pipe = True
+                
+#                 if 'isNormalERF' in df.columns:
+#                     df = df.drop(columns=['isNormalERF'])
+                
+#                 df = convert_data_types(df)
+#                 df = add_new_columns_to_pipe_tally(df)
+
+#                 # Check against `pipeTallyColumns` if defined
+#                 if len(pipeTallyColumns) > 0:
+#                     message, misspelled, true_extra, missing = compare_arrays_with_alert(pipeTallyColumns, df.columns)
+#                     if message != 'OK':
+#                         if len(misspelled) > 0 or len(missing) > 0:
+#                             print(f"Warning: Issues with sheet '{sheet_name}':")
+#                             if len(misspelled) > 0:
+#                                 print(f"  - Misspelled columns: {', '.join(misspelled)}")
+#                             if len(missing) > 0:
+#                                 print(f"  - Missing columns: {', '.join(missing)}")
+#                         if len(true_extra) > 0:
+#                             print(f"Info: Extra columns in '{sheet_name}': {', '.join(true_extra)}")
+            
+#             if sheet_name == "List of Nominal Wall Thickness":
+#                 check_List_Nominal = True
+
+#                 # Check against `nomThickColumns` if defined
+#                 if len(nomThickColumns) > 0:
+#                     message, misspelled, true_extra, missing = compare_arrays_with_alert(nomThickColumns, df.columns)
+#                     if message != 'OK':
+#                         if len(misspelled) > 0 or len(missing) > 0:
+#                             print(f"Warning: Issues with sheet '{sheet_name}':")
+#                             if len(misspelled) > 0:
+#                                 print(f"  - Misspelled columns: {', '.join(misspelled)}")
+#                             if len(missing) > 0:
+#                                 print(f"  - Missing columns: {', '.join(missing)}")
+#                         if len(true_extra) > 0:
+#                             print(f"Info: Extra columns in '{sheet_name}': {', '.join(true_extra)}")
+            
+#             # Create tables and import data
+#             success, df = create_access_table(cursor, sheet_name, df)
+#             if success:
+#                 insert_data_to_access(cursor, sheet_name, df)
+           
+#             progress = int((i / total_sheets) * 100)
+#             print(f"PROGRESS:{progress}", flush=True)
+       
+#         create_new_tables(cursor)
+
+#         conn.commit()
+#         print("Excel to Access conversion completed successfully")
+#         return True
+    
+#     except Exception as e:
+#         print(f"Error during Excel to Access conversion: {str(e)}")
+#         if conn:
+#             conn.rollback()
+        
+#         # Delete the created database if an error occurs
+#         if os.path.exists(access_file):
+#             try:
+#                 if conn:
+#                     conn.close()
+#                 os.remove(access_file)
+#                 print(f"Removed incomplete database: {access_file}")
+#             except Exception as e2:
+#                 print(f"Warning: Could not remove database file: {str(e2)}")
+#         return False
+    
+#     finally:
+#         if conn:
+#             try:
+#                 conn.close()
+#             except Exception as e:
+#                 print(f"Warning: Error closing connection: {str(e)}")
+
+def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_modes=None):
     check_List_Pipe = False
     check_List_Nominal = False
     pipeTallyColumns = []  
     nomThickColumns = []
     
-    # Use `header_file` if specified; otherwise, use default values
-    if header_file is None:
+    # Use selected_headers if provided, otherwise use header_file, otherwise use default values
+    if selected_headers:
+        # Use selected headers from UI
+        pipeTallyColumns = selected_headers
+        print(f"✅ Using selected headers from UI: {len(selected_headers)} headers")
+        print(f"Selected headers: {selected_headers}")
+    elif header_file is not None:
+        # Use header_file if specified
+        try:
+            xlsHead = pd.ExcelFile(header_file)
+            for sheet_name in xlsHead.sheet_names:
+                dfheader = pd.read_excel(xlsHead, sheet_name=sheet_name, header=None)
+                
+                if sheet_name == "List of Pipe Tally":
+                    dfheader = GetHeaderColumn(dfheader)
+                    pipeTallyColumns = dfheader.columns
+                
+                if sheet_name == "List of Nominal Wall Thickness":
+                    dfheader = GetHeaderColumn(dfheader)
+                    nomThickColumns = dfheader.columns
+        except Exception as e:
+            print(f"Warning: Error reading header file: {str(e)}")
+    else:
+        # Use default header file
         header_file = resource_path("resoure\\header.xlsx")
+        try:
+            if os.path.exists(header_file):
+                xlsHead = pd.ExcelFile(header_file)
+                for sheet_name in xlsHead.sheet_names:
+                    dfheader = pd.read_excel(xlsHead, sheet_name=sheet_name, header=None)
+                    
+                    if sheet_name == "List of Pipe Tally":
+                        dfheader = GetHeaderColumn(dfheader)
+                        pipeTallyColumns = dfheader.columns
+                    
+                    if sheet_name == "List of Nominal Wall Thickness":
+                        dfheader = GetHeaderColumn(dfheader)
+                        nomThickColumns = dfheader.columns
+        except Exception as e:
+            print(f"Warning: Error reading default header file: {str(e)}")
+
+    # Debug sheet modes
+    if sheet_modes:
+        print(f"✅ Sheet processing modes received:")
+        for sheet_name, mode in sheet_modes.items():
+            print(f"  - {sheet_name}: {mode}")
+    else:
+        print("⚠️ No sheet modes provided, will use original headers for all sheets")
 
     # Create or connect to the Access database
     access_file = os.path.splitext(excel_file)[0] + ".accdb"
@@ -583,28 +756,26 @@ def excel_to_access(excel_file, header_file=None):
         xls = pd.ExcelFile(excel_file)
         total_sheets = len(xls.sheet_names)
         
-        try:
-            # Read the header file if it exists
-            if os.path.exists(header_file):
-                xlsHead = pd.ExcelFile(header_file)
-                for sheet_name in xlsHead.sheet_names:
-                    dfheader = pd.read_excel(xlsHead, sheet_name=sheet_name, header=None)
-                    
-                    if sheet_name == "List of Pipe Tally":
-                        dfheader = GetHeaderColumn(dfheader)
-                        pipeTallyColumns = dfheader.columns
-                    
-                    if sheet_name == "List of Nominal Wall Thickness":
-                        dfheader = GetHeaderColumn(dfheader)
-                        nomThickColumns = dfheader.columns
-        except Exception as e:
-            print(f"Warning: Error reading header file: {str(e)}")
-        
         # Process each sheet in the Excel file
         for i, sheet_name in enumerate(xls.sheet_names, 1):
             print(f"Processing sheet: {sheet_name}")
             df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
             df = set_specific_headers(df, sheet_name)
+            
+            # Check sheet processing mode
+            sheet_mode = "individual"  # default
+            if sheet_modes and sheet_name in sheet_modes:
+                sheet_mode = sheet_modes[sheet_name]
+            
+            print(f"Sheet '{sheet_name}' processing mode: {sheet_mode}")
+            
+            # Apply header management based on sheet mode
+            if selected_headers and sheet_mode == "standard":
+                df = apply_selected_headers_to_dataframe(df, selected_headers)
+                print(f"✅ Applied selected headers to {sheet_name}: {len(df.columns)} columns")
+            else:
+                print(f"📋 Using original headers for {sheet_name}: {len(df.columns)} columns")
+            
             df = add_erf_type(df)
             
             if sheet_name == "List of Pipe Tally":
@@ -681,6 +852,70 @@ def excel_to_access(excel_file, header_file=None):
                 conn.close()
             except Exception as e:
                 print(f"Warning: Error closing connection: {str(e)}")
+
+def apply_selected_headers_to_dataframe(df, selected_headers):
+    """Apply selected headers to DataFrame, with selected headers first, then remaining columns as TempData"""
+    try:
+        # Get current columns
+        current_columns = list(df.columns)
+        
+        # Create new DataFrame with selected headers first
+        new_df_data = {}
+        used_original_columns = []
+        
+        print(f"Original columns ({len(current_columns)}): {current_columns}")
+        print(f"Selected headers ({len(selected_headers)}): {selected_headers}")
+        
+        # Step 1: Add selected headers in the order they were selected
+        for i, header in enumerate(selected_headers):
+            # Find matching column in original data (case-insensitive and flexible matching)
+            matched_column = None
+            for orig_col in current_columns:
+                if orig_col not in used_original_columns:
+                    # Try exact match first
+                    if header == orig_col:
+                        matched_column = orig_col
+                        break
+                    # Try case-insensitive match
+                    elif header.lower() == orig_col.lower():
+                        matched_column = orig_col
+                        break
+                    # Try partial match (header contains original or vice versa)
+                    elif header.lower() in orig_col.lower() or orig_col.lower() in header.lower():
+                        matched_column = orig_col
+                        break
+            
+            if matched_column:
+                # Use selected header name, but copy data from matched original column
+                new_df_data[header] = df[matched_column].copy()
+                used_original_columns.append(matched_column)
+                print(f"  ✅ Selected header '{header}' -> matched with '{matched_column}'")
+            else:
+                # Header not found - create empty column with selected name
+                new_df_data[header] = [None] * len(df)
+                print(f"  ⚠️ Selected header '{header}' -> not found, creating empty column")
+        
+        # Step 2: Add remaining original columns as TempData1, TempData2, etc.
+        temp_data_counter = 1
+        for orig_col in current_columns:
+            if orig_col not in used_original_columns:
+                temp_name = f"TempData{temp_data_counter}"
+                new_df_data[temp_name] = df[orig_col].copy()
+                print(f"  📁 Remaining column '{orig_col}' -> renamed to '{temp_name}'")
+                temp_data_counter += 1
+        
+        # Create new DataFrame with the new structure
+        new_df = pd.DataFrame(new_df_data)
+        
+        print(f"Final result: {len(new_df.columns)} columns")
+        print(f"Column order: {list(new_df.columns)}")
+        
+        return new_df
+        
+    except Exception as e:
+        print(f"Error applying selected headers: {str(e)}")
+        print(f"Returning original DataFrame")
+        return df
 
 def main():
     if len(sys.argv) < 2:
