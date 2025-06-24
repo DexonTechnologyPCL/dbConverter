@@ -496,14 +496,14 @@ class HeaderSelector:
                 if any(erf_pattern in excel_header.lower() for erf_pattern in 
                       ["erf (metal loss)", "erf (modified)", "erf(metal loss)", "erf(modified)"]):
                     return excel_header, "hardcoded"
-        
+
         # Hard-coded mapping for Comments
         if standard_header == "Comments":
             for excel_header in excel_headers:
-                excel_lower = excel_header.lower().strip()
-                if excel_lower == "comment" or excel_lower == "comments":
+                if any(comment_pattern in excel_header.lower() for comment_pattern in 
+                    ["comment", "comments"]):
                     return excel_header, "hardcoded"
-        
+
         # Other auto mappings
         best_match = self.find_best_match(standard_header, excel_headers)
         if best_match:
@@ -530,7 +530,7 @@ class HeaderSelector:
                 best_score = score
                 best_match = excel_header
         
-        return best_match
+        return best_match    
 
     def clean_header_for_matching(self, header):
         """Clean header for matching"""
@@ -618,7 +618,7 @@ class HeaderSelector:
             self.load_excel_data()
 
     def load_excel_data(self):
-        """Load data from Excel file"""
+        """Load data from Excel file - Added ini file OriginalHeader logging"""
         try:
             self.status_label.config(text="⏳ Loading...", foreground="blue")
             self.root.update()
@@ -629,15 +629,13 @@ class HeaderSelector:
             # Clear old mapping
             self.sheet_mappings = {}
             self.sheet_selected_headers = {}
-            
-            print(f"📋 Found {len(xls.sheet_names)} sheets in Excel file:")
+
             for i, sheet_name in enumerate(xls.sheet_names, 1):
                 print(f"  {i}. {sheet_name}")
             
             # Load all sheets in Excel order
             for sheet_name in xls.sheet_names:
                 try:
-                    print(f"Reading sheet: {sheet_name}")
                     df = pd.read_excel(xls, sheet_name=sheet_name, header=None, nrows=3)
                     headers = self.extract_headers(df)
                     self.all_sheets_data[sheet_name] = headers
@@ -650,12 +648,13 @@ class HeaderSelector:
             if not self.all_sheets_data:
                 raise Exception("No sheets could be read from the Excel file")
             
+            # Save the OriginalHeader file immediately after Excel load is complete.
+            original_file = self.create_original_headers_file()
+
             # Update dropdown in Excel file
             sheet_names = list(self.all_sheets_data.keys())
             self.sheet_combo['values'] = sheet_names
-            
-            print(f"📊 Successfully loaded sheets (in Excel order): {sheet_names}")
-            
+
             # Set default to first sheet in Excel order
             if sheet_names:
                 default_sheet = sheet_names[0]  # First sheet in Excel order
@@ -677,7 +676,6 @@ class HeaderSelector:
             
         except Exception as e:
             error_msg = f"Unable to read Excel file\n\n❌ Error: {str(e)}"
-            print(f"❌ Error loading Excel: {str(e)}")
             messagebox.showerror("❌ Error", error_msg)
             self.status_label.config(text="❌ Error loading file", foreground="red")
 
@@ -719,10 +717,8 @@ class HeaderSelector:
         
         if self.selected_sheet in self.sheet_selected_headers:
             saved_headers = self.sheet_selected_headers[self.selected_sheet]
-            print(f"📋 Loading saved mapping for sheet '{self.selected_sheet}': {len(saved_headers)} headers")
             self.restore_header_selections(saved_headers)   # Restore header selection
         else:
-            print(f"📋 No saved mapping for sheet '{self.selected_sheet}', using auto-mapping")
             self.auto_select_best_options()                 # If no saved data, perform auto-mapping
 
     def restore_header_selections(self, saved_headers):
@@ -746,9 +742,7 @@ class HeaderSelector:
         
         self.auto_select_best_options()     # Auto-select best options for dropdowns
         self.update_standard_tree()         # Update mapping display
-        
-        # บันทึก mapping หลังจาก auto-map
-        self.save_current_sheet_mapping()
+        self.save_current_sheet_mapping()   # Save mapping after auto-map
         
         # Count mappings
         available_headers = self.get_selected_excel_headers()
@@ -781,7 +775,6 @@ class HeaderSelector:
 
     def select_best_header(self, headers):
         """Select the first header from the list (first occurrence in Excel)"""
-        # First in list = first that appears in Excel
         return headers[0] if headers else None
 
     def clear_all_mappings(self):
@@ -794,9 +787,7 @@ class HeaderSelector:
                 widget_info['status'].config(text="Dropdown", foreground="orange")
         
         self.update_standard_tree()
-        
-        # บันทึก mapping หลังจาก clear
-        self.save_current_sheet_mapping()
+        self.save_current_sheet_mapping()       # Save mapping after clear
         
         messagebox.showinfo("❌ Complete", "Reset all selections to default")
 
@@ -889,16 +880,13 @@ class HeaderSelector:
             f"📊 Total Sheets: {len(self.all_sheets_data)}\n"
             f"✅ Configured Sheets: {configured_count}\n"
             f"📋 Unconfigured Sheets: {unconfigured_count}\n\n"
-            f"All sheets will be converted:\n"
-            f"• Configured sheets will use custom mappings\n"
-            f"• Unconfigured sheets will use original headers"
         )
         
         if result:
             self.perform_conversion()
 
     def perform_conversion(self):
-        """Perform the conversion using mappings from all sheets"""
+        """Perform the conversion using mappings from all sheets - Save ini file HeaderMapping when convert"""
         # Save mapping of current sheet first
         if self.selected_sheet:
             self.save_current_sheet_mapping()
@@ -951,8 +939,9 @@ class HeaderSelector:
             )
             
             if result:
-                access_file = os.path.splitext(self.excel_file)[0] + ".accdb"
-                
+                access_file  = os.path.splitext(self.excel_file)[0] + ".accdb"
+                mapping_file = self.create_header_mapping_file()         # Save the HeaderMapping.p file after conversion is complete.
+
                 self.result_text.insert(tk.END, "\n" + "="*60 + "\n")
                 self.result_text.insert(tk.END, "✅ CONVERSION COMPLETED SUCCESSFULLY!\n")
                 self.result_text.insert(tk.END, "="*60 + "\n\n")
@@ -984,8 +973,7 @@ class HeaderSelector:
 
     def excel_to_access_with_all_mappings(self, excel_file, sheet_modes, all_sheet_mappings):
         """Call excel_to_access with mappings for all sheets"""
-    
-        print(f"🔍 Processing mappings for {len(all_sheet_mappings)} sheets:")
+        
         for sheet_name, mappings in all_sheet_mappings.items():
             mapped_count = sum(1 for v in mappings.values() if v is not None)
             print(f"  📋 {sheet_name}: {mapped_count}/{len(mappings)} headers mapped")
@@ -1003,9 +991,7 @@ class HeaderSelector:
     
         if not primary_mapping:
             primary_mapping = self.Set_standard_headers()   # If no mapping exists, use default
-    
-        print(f"🎯 Using primary mapping from '{primary_sheet}': {len(primary_mapping)} headers")
-    
+
         enhanced_sheet_modes = {}
         for sheet_name, mode in sheet_modes.items():
             if mode == "standard" and sheet_name in all_sheet_mappings:
@@ -1035,6 +1021,161 @@ class HeaderSelector:
             mappings[standard_header] = mapped_excel
         
         return mappings
+
+    def create_original_headers_file(self):
+        """Save the OriginalHeader.~p~ file immediately when importing to Excel"""
+        if not self.excel_file or not self.all_sheets_data:
+            return None
+    
+        try:
+            # Create a file named OriginalHeader.p in the same location as Excel.
+            excel_dir       = os.path.dirname(self.excel_file)
+            original_file   = os.path.join(excel_dir, "OriginalHeader.~p~")
+      
+            content = f"""Original Excel Headers Report
+            {'='*80}
+            📁 Source File: {os.path.basename(self.excel_file)}
+            📊 Total Sheets: {len(self.all_sheets_data)}
+            {'='*80}
+
+            """
+        
+            # Loop through each sheet
+            for sheet_name in self.all_sheets_data.keys():
+                headers = self.all_sheets_data[sheet_name]
+            
+                content += f"\n📋 SHEET: {sheet_name}\n"
+                content += f"{'─'*60}\n"
+                content += f"Total Headers: {len(headers)}\n"
+            
+                # Show headers in order in Excel
+                for i, header in enumerate(headers, 1):
+                    content += f"  {i:2d}. {header}\n"
+          
+            # File summary
+            total_headers = sum(len(headers) for headers in self.all_sheets_data.values())
+
+            # Save file
+            with open(original_file, 'w', encoding='utf-8') as f:
+                f.write(content)
+       
+            return original_file
+        
+        except Exception as e:
+            print(f"❌ Error auto-saving OriginalHeader.~p~: {str(e)}")
+            return None
+
+    def create_header_mapping_file(self):
+        """Save the HeaderMapping.~p~ file when converting to DB"""
+        if not self.excel_file:
+            return None
+    
+        # Save the mapping of the current sheet first
+        if self.selected_sheet:
+            self.save_current_sheet_mapping()
+    
+        try:
+            # Create a file named HeaderMapping.p in the same location as Excel.
+            excel_dir       = os.path.dirname(self.excel_file)
+            mapping_file    = os.path.join(excel_dir, "HeaderMapping.~p~")
+            content         = f"""Header Mapping Report
+            {'='*80}
+            📁 Source File: {os.path.basename(self.excel_file)}
+            📊 Total Sheets: {len(self.all_sheets_data)}
+            {'='*80}
+
+            """
+        
+            # Loop through each sheet
+            for sheet_name in self.all_sheets_data.keys():
+                content += f"\n📋 SHEET: {sheet_name}\n"
+                content += f"{'─'*60}\n"
+                sheet_type = "List of Nominal Wall Thickness" if "List of Nominal Wall Thickness" in sheet_name else "Standard"# Check sheet type
+                content += f"Sheet Type: {sheet_type}\n"
+           
+                standard_headers = self.get_sheet_specific_headers(sheet_name)      # Get standard headers for this sheet
+            
+                if sheet_name in self.sheet_mappings:
+                    mappings = self.sheet_mappings[sheet_name]                      # Sheet with mapping
+                    content += f"Standard Headers: {len(standard_headers)}\n"
+                    content += f"Header Mappings:\n\n"
+                
+                    mapped_count = 0
+                    unmapped_count = 0
+                    tempdata_count = 0
+
+                    content += f"{'Standard Header':<50} >> {'Mapping Column'}\n"   # Show mapping of standard headers
+                    content += f"{'-'*50} >> {'-'*50}\n"
+                
+                    for i, standard_header in enumerate(standard_headers, 1):
+                        mapped_to = mappings.get(standard_header)
+                        if mapped_to:
+                            content += f"{standard_header:<50} >> {mapped_to}\n"
+                            mapped_count += 1
+                        else:
+                            content += f"{standard_header:<50} >> [Empty - Will create empty column]\n"
+                            unmapped_count += 1
+                    
+                    # Find the remaining headers from Excel that are not used.
+                    used_headers        = [v for v in mappings.values() if v is not None]
+                    all_excel_headers   = self.all_sheets_data[sheet_name]
+                    remaining_headers   = [h for h in all_excel_headers if h not in used_headers]
+                
+                    if remaining_headers:
+                        content += f"\n📁 REMAINING COLUMNS (will become TempData):\n"
+                        for i, orig_col in enumerate(remaining_headers, 1):
+                            content += f"TempData{i:<3d} << {orig_col}\n"
+                            tempdata_count += 1
+                    else:
+                        content += f"\n📋 No remaining columns - no TempData will be created\n"
+                
+                    # Show new columns for List of Pipe Tally
+                    if sheet_name == "List of Pipe Tally":
+                        content += f"\n🆕 NEW COLUMNS:\n"
+                        new_columns = ['Velocity (m/s)', 'DigSheet', 'ImgPath1', 'ImgPath2', 'Timestr']
+                        for new_col in new_columns:
+                            content += f"{new_col}\n"   
+                else:
+                    # Sheet without mapping
+                    content += f"Status: ⚠️ Not Configured (Original Headers)\n"
+                    available_headers = self.all_sheets_data[sheet_name]
+                    content += f"Will use original Excel headers ({len(available_headers)} columns):\n\n"
+                
+                    for i, header in enumerate(available_headers, 1):
+                        content += f"  {i:2d}. {header}\n"
+        
+            # File summary
+            configured_count    = len(self.sheet_mappings)
+            unconfigured_count  = len(self.all_sheets_data) - configured_count
+        
+            if configured_count > 0:
+                total_mapped    = 0
+                total_standards = 0
+                total_tempdata  = 0
+            
+                for sheet_name, mappings in self.sheet_mappings.items():
+                    total_mapped += sum(1 for v in mappings.values() if v is not None)
+                    total_standards += len(mappings)
+                
+                    used_headers        = [v for v in mappings.values() if v is not None]  # Count TempData
+                    all_excel_headers   = self.all_sheets_data[sheet_name]
+                    remaining_headers   = [h for h in all_excel_headers if h not in used_headers]
+                    total_tempdata += len(remaining_headers)
+            
+                content += f"📋 Total Standard Headers: {total_standards}\n"
+                content += f"✅ Total Mapped Headers: {total_mapped}\n"
+                content += f"📦 Total TempData Columns: {total_tempdata}\n"
+        
+            # Save file
+            with open(mapping_file, 'w', encoding='utf-8') as f:
+                f.write(content)
+        
+            print(f"✅ Created HeaderMapping.p: {mapping_file}")
+            return mapping_file
+        
+        except Exception as e:
+            print(f"❌ Error creating HeaderMapping.p: {str(e)}")
+            return None
 
 def main():
     """Main function to run the program"""

@@ -155,8 +155,16 @@ def set_specific_headers(df, sheetname):
 
     # Set the last column name to 'Comments' unless it's the 'List of Nominal Wall Thickness' sheet.
     if sheetname != "List of Nominal Wall Thickness":
-        if "Comments" not in headers and len(headers) > 1:
+        has_comment_column = any(
+            str(header).lower().strip() in ['comment', 'comments'] 
+            for header in headers
+        )
+        
+        if not has_comment_column and len(headers) > 1:
             headers[-1] = "Comments"        # Forcefully assign if missing
+            print(f"📝 Added 'Comments' as last column in sheet '{sheetname}'")
+        else:
+            print(f"📋 Sheet '{sheetname}' already has comment column, skipping auto-assignment")
     
     # Ensure all headers are strings and unique
     unique_headers = []
@@ -464,49 +472,6 @@ def add_erf_type(df):
         df['isNormalERF'] = True
     return df
 
-# def add_new_columns_to_pipe_tally(df):
-#     """Add 3 new columns in the DataFrame of List of Pipe Tally"""
-#     # Add 3 new columns with default values
-#     df['Velocity (m/s)'] = None 
-#     df['DigSheet'] = None
-#     df['ImgPath1'] = None
-#     df['ImgPath2'] = None
-
-#     return df
-
-def add_new_columns_to_pipe_tally(df):
-    """Add 4 new columns in the DataFrame of List of Pipe Tally, then add TempData at the end"""
-    print(f"📋 Before adding new columns: {len(df.columns)} columns")
-    
-    # Add 4 new columns with default values
-    df['Velocity (m/s)'] = None 
-    df['DigSheet'] = None
-    df['ImgPath1'] = None
-    df['ImgPath2'] = None
-    
-    print(f"✅ After adding new columns: {len(df.columns)} columns")
-    print(f"    📌 Added: Velocity (m/s), DigSheet, ImgPath1, ImgPath2")
-    
-    # Now add TempData columns at the very end
-    if hasattr(df, '_remaining_columns_data') and df._remaining_columns_data:
-        print(f"📁 Adding TempData columns at the end...")
-        
-        temp_counter = 1
-        for original_col_name, col_data in df._remaining_columns_data.items():
-            temp_name = f"TempData{temp_counter}"
-            df[temp_name] = col_data.copy()
-            print(f"    📦 Added: {temp_name} <- {original_col_name}")
-            temp_counter += 1
-        
-        # Clean up attribute
-        delattr(df, '_remaining_columns_data')
-        
-        print(f"🎯 Final List of Pipe Tally: {len(df.columns)} total columns")
-    else:
-        print("📋 No TempData columns to add")
-    
-    return df
-
 def create_new_tables(cursor):
     """Create 4 new tables that do not exist in Excel"""
     # Create table Velocity
@@ -595,10 +560,7 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
     
     # Use selected_headers if provided, otherwise use header_file, otherwise use default values
     if selected_headers:
-        # Use selected headers from UI
-        pipeTallyColumns = selected_headers
-        print(f"✅ Using selected headers from UI: {len(selected_headers)} headers")
-        print(f"Selected headers: {selected_headers}")
+        pipeTallyColumns = selected_headers        # Use selected headers from UI
     elif header_file is not None:
         # Use header_file if specified
         try:
@@ -634,19 +596,8 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
         except Exception as e:
             print(f"Warning: Error reading default header file: {str(e)}")
 
-    # Debug sheet modes
-    if sheet_modes:
-        print(f"✅ Sheet processing modes received:")
-        for sheet_name, mode in sheet_modes.items():
-            print(f"  - {sheet_name}: {mode}")
-    else:
-        print("⚠️ No sheet modes provided, will use original headers for all sheets")
-
-    # Create or connect to the Access database
-    access_file = os.path.splitext(excel_file)[0] + ".accdb"
-    
-    # Create a new Access database
-    if not create_access_database(access_file):
+    access_file = os.path.splitext(excel_file)[0] + ".accdb"    # Create or connect to the Access database
+    if not create_access_database(access_file):                 # Create a new Access database
         print("Error: Failed to create Access database.")
         return False
     
@@ -683,10 +634,8 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
                     sheet_mappings  = mode_data.get('mappings')
                     is_nominal_wall = mode_data.get('is_nominal_wall', False)
                 else:
-                    # Simple mode string
-                    sheet_mode = mode_data
+                    sheet_mode = mode_data      # Simple mode string
 
-            print(f"Sheet '{sheet_name}' processing mode: {sheet_mode}")
             if sheet_mappings:
                 mapped_count = sum(1 for v in sheet_mappings.values() if v is not None)
                 print(f"Sheet '{sheet_name}' has {mapped_count} mapped headers")
@@ -694,9 +643,7 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
             # Apply header management based on sheet mode
             if sheet_mode == "standard":
                 if sheet_mappings:
-                    # Using mappings from UI
-                    print(f"📋 Applying UI mappings to '{sheet_name}'")
-                    df = apply_selected_headers_to_dataframe_with_mappings(df, sheet_mappings)
+                    df = apply_selected_headers_to_dataframe(df, sheet_mappings, sheet_name)        # Using mappings from UI
                 elif is_nominal_wall:
                     # Sheet "List of Nominal Wall Thickness" use specific headers
                     nominal_headers = [
@@ -708,11 +655,9 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
                         "Design Pressure (psi)",
                         "MAOP (psi)"
                     ]
-                    df = apply_selected_headers_to_dataframe(df, nominal_headers)
+                    df = apply_selected_headers_to_dataframe(df, nominal_headers, sheet_name)
                 elif selected_headers:
-                    df = apply_selected_headers_to_dataframe(df, selected_headers)  # Use normal selected headers
-                else:
-                    print(f"⚠️ No headers to apply for '{sheet_name}', using original")     
+                    df = apply_selected_headers_to_dataframe(df, selected_headers, sheet_name)      # Use normal selected headers   
             else:
                 print(f"📋 Using original headers for {sheet_name}: {len(df.columns)} columns")
 
@@ -725,7 +670,6 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
                     df = df.drop(columns=['isNormalERF'])
         
                 df = convert_data_types(df)
-                df = add_new_columns_to_pipe_tally(df)
 
                 # Check against `pipeTallyColumns` if defined
                 if len(pipeTallyColumns) > 0:
@@ -793,140 +737,86 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
             except Exception as e:
                 print(f"Warning: Error closing connection: {str(e)}")
 
-def apply_selected_headers_to_dataframe_with_mappings(df, ui_mappings):
-    """Apply UI mappings using existing apply_selected_headers_to_dataframe function"""
+def apply_selected_headers_to_dataframe(df, selected_headers_or_mappings, sheet_name=None):
+    """Apply selected headers or UI mappings to DataFrame and add TempData after new columns"""
     try:
-        current_columns = list(df.columns)
-        
-        print(f"🔍 UI Mappings received:")
-        for std_header, excel_header in ui_mappings.items():
-            if excel_header:
-                print(f"  {std_header} <-- {excel_header}")
-        
-        # สร้าง mapping ใหม่โดยเรียงลำดับตาม UI mappings
-        ordered_headers = []
-        excel_to_standard_map = {}
-        
-        # Step 1: เก็บ headers ที่ถูก map
-        for std_header, excel_header in ui_mappings.items():
-            if excel_header and excel_header in current_columns:
-                ordered_headers.append(std_header)
-                excel_to_standard_map[excel_header] = std_header
-                print(f"  ✅ Will map: {excel_header} -> {std_header}")
-        
-        # Step 2: เพิ่ม standard headers ที่ไม่ได้ map (จะเป็น empty columns)
-        for std_header in ui_mappings.keys():
-            if std_header not in ordered_headers:
-                ordered_headers.append(std_header)
-                print(f"  ⚠️ Will create empty: {std_header}")
-        
-        print(f"📋 Final ordered headers: {len(ordered_headers)} headers")
-        
-        # Apply specific mappings from UI
-        corrected_data = {}
-        used_excel_columns = []
-        
-        # Map ข้อมูลตาม UI mappings
-        for std_header in ordered_headers:
-            if std_header in ui_mappings and ui_mappings[std_header]:
-                excel_header = ui_mappings[std_header]
-                if excel_header in current_columns:
-                    corrected_data[std_header] = df[excel_header].copy()
-                    used_excel_columns.append(excel_header)
-                    print(f"    ✅ {std_header} <- {excel_header}")
-                else:
-                    corrected_data[std_header] = [None] * len(df)
-                    print(f"    ⚠️ {std_header} <- [Empty - Excel column not found]")
-            else:
-                corrected_data[std_header] = [None] * len(df)
-                print(f"    ⚠️ {std_header} <- [Empty - Not mapped]")
-        
-        # Add remaining columns as TempData
-        temp_data_counter = 1
-        remaining_columns = [col for col in current_columns if col not in used_excel_columns]
-        
-        print(f"\n📁 REMAINING COLUMNS FOR TEMPDATA ({len(remaining_columns)}):")
-        
-        for orig_col in remaining_columns:
-            temp_name = f"TempData{temp_data_counter}"
-            corrected_data[temp_name] = df[orig_col].copy()
-            print(f"    📦 {temp_name} <- {orig_col}")
-            temp_data_counter += 1
-        
-        # Create DataFrame with all data
-        df_result = pd.DataFrame(corrected_data)
-        
-        print(f"📊 Final result: {len(df_result.columns)} columns")
-        return df_result
-        
-    except Exception as e:
-        print(f"❌ Error in apply_selected_headers_to_dataframe_with_mappings: {str(e)}")
-        # ถ้า error ให้ใช้ฟังก์ชันเดิม
-        return apply_selected_headers_to_dataframe(df, list(ui_mappings.keys()))
-
-def apply_selected_headers_to_dataframe(df, selected_headers):
-    """Apply selected headers to DataFrame, with selected headers first, then remaining columns as TempData"""
-    try:
-        # Get current columns
         current_columns = list(df.columns)
         new_df_data = {}
         used_original_columns = []
-        
-        print(f"🔍 Original columns ({len(current_columns)}): {current_columns}")
-        print(f"🎯 Selected headers ({len(selected_headers)}): {selected_headers}")
-        
-        # Step 1: Add selected headers in the order they were selected
-        for i, header in enumerate(selected_headers):
-            # Find matching column in original data (case-insensitive and flexible matching)
-            matched_column = None
-            for orig_col in current_columns:
-                if orig_col not in used_original_columns:
-                    # Try exact match first
-                    if header == orig_col:
-                        matched_column = orig_col
-                        break
-                    # Try case-insensitive match
-                    elif header.lower() == orig_col.lower():
-                        matched_column = orig_col
-                        break
-                    # Try partial match (header contains original or vice versa)
-                    elif header.lower() in orig_col.lower() or orig_col.lower() in header.lower():
-                        matched_column = orig_col
-                        break
+
+        # Check if it's a dict (mappings) or a list (headers)
+        if isinstance(selected_headers_or_mappings, dict):
+            ui_mappings = selected_headers_or_mappings
             
-            if matched_column:
-                # Use selected header name, but copy data from matched original column
-                new_df_data[header] = df[matched_column].copy()
-                used_original_columns.append(matched_column)
-                print(f"  ✅ '{header}' <-- '{matched_column}'")
-            else:
-                # Header not found - create empty column with selected name
-                new_df_data[header] = [None] * len(df)
-                print(f"  ⚠️ '{header}' <-- [EMPTY - No Match Found]")
+            for std_header, excel_header in ui_mappings.items():
+                if excel_header:
+                    print(f"  {std_header} <-- {excel_header}")
+            
+            # Apply mappings
+            for std_header, excel_header in ui_mappings.items():
+                if excel_header and excel_header in current_columns:
+                    new_df_data[std_header] = df[excel_header].copy()
+                    used_original_columns.append(excel_header)
+                    print(f"    ✅ {std_header} <- {excel_header}")
+                else:
+                    new_df_data[std_header] = [None] * len(df)
+                    if excel_header:
+                        print(f"    ⚠️ {std_header} <- [Empty - Excel column '{excel_header}' not found]")
+                    else:
+                        print(f"    ⚠️ {std_header} <- [Empty - Not mapped]")          
+        else:
+            selected_headers = selected_headers_or_mappings
+           
+            for header in selected_headers:     # Apply headers
+                matched_column = None
+                for orig_col in current_columns:
+                    if orig_col not in used_original_columns:
+                        if header == orig_col or header.lower() == orig_col.lower():
+                            matched_column = orig_col
+                            break
+                        elif header.lower() in orig_col.lower() or orig_col.lower() in header.lower():
+                            matched_column = orig_col
+                            break
+                
+                if matched_column:
+                    new_df_data[header] = df[matched_column].copy()
+                    used_original_columns.append(matched_column)
+                    print(f"  ✅ '{header}' <-- '{matched_column}'")
+                else:
+                    new_df_data[header] = [None] * len(df)
+                    print(f"  ⚠️ '{header}' <-- [EMPTY - No Match Found]")
         
-        # Step 2: Add remaining columns as TempData
-        temp_data_counter = 1
+        # Calculate remaining columns
         remaining_columns = [col for col in current_columns if col not in used_original_columns]
         
-        print(f"\n📁 REMAINING COLUMNS FOR TEMPDATA ({len(remaining_columns)}):")
+        # Add new column only in Sheet "List of Pipe Tally"
+        if sheet_name == "List of Pipe Tally":
+            print(f"📌 Adding 5 new columns (Sheet: {sheet_name})...")
+            new_df_data['Velocity (m/s)'] = [None] * len(df)
+            new_df_data['DigSheet'] = [None] * len(df)
+            new_df_data['ImgPath1'] = [None] * len(df)
+            new_df_data['ImgPath2'] = [None] * len(df)
+            new_df_data['Timestr'] = [None] * len(df)
+            print(f"✅ Added: Velocity (m/s), DigSheet, ImgPath1, ImgPath2, Timestr")
+        else:
+            print(f"📋 Skipping new columns (Sheet: {sheet_name} - not 'List of Pipe Tally')")
         
-        for orig_col in remaining_columns:
-            temp_name = f"TempData{temp_data_counter}"
-            new_df_data[temp_name] = df[orig_col].copy()
-            print(f"  📦 {temp_name} <- {orig_col}")
-            temp_data_counter += 1
+        # Add TempData
+        if remaining_columns:
+            temp_counter = 1
+            for orig_col in remaining_columns:
+                temp_name = f"TempData{temp_counter}"
+                new_df_data[temp_name] = df[orig_col].copy()
+                print(f"    📦 {temp_name} <- {orig_col}")
+                temp_counter += 1
+        else:
+            print("📋 No remaining columns - no TempData to add")
         
-        # Create new DataFrame with the new structure
-        new_df = pd.DataFrame(new_df_data)
-        
-        print(f"✅ Final result: {len(new_df.columns)} columns")
-        print(f"📋 Column order: {list(new_df.columns)}")
-        
+        new_df = pd.DataFrame(new_df_data)  # Create DataFrame
         return new_df
         
     except Exception as e:
-        print(f"❌ Error applying selected headers: {str(e)}")
-        print(f"Returning original DataFrame")
+        print(f"❌ Error applying headers: {str(e)}")
         return df
 
 def main():
