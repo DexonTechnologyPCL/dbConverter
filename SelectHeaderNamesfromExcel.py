@@ -78,8 +78,8 @@ class HeaderSelector:
         """Set standard columns"""
         return [
             "Log distance (m)",
-            "Longitude (degree)",
             "Latitude (degree)",
+            "Longitude (degree)",
             "Altitude (m)",
             "Feature type",
             "Feature identification",

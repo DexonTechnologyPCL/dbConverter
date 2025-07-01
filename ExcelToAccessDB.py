@@ -265,8 +265,12 @@ def clean_column_name(column_name):
    
     return clean_name
 
-def get_access_data_type(df_column):
+def get_access_data_type(df_column, column_name=None, table_name=None):
     """ Assign appropriate data types for columns in Access"""
+    
+    # Specify specific Data Type for the required columns and tables - only Log distance (m) in List of Pipe Tally.
+    if table_name == "List of Pipe Tally" and column_name == "Log distance (m)":
+        return "DOUBLE"
 
     if pd.api.types.is_float_dtype(df_column):
         return "DOUBLE"
@@ -309,7 +313,7 @@ def create_access_table(cursor, table_name, df):
         columns = []
         for col in df.columns:
             clean_col = column_map[col]
-            data_type = get_access_data_type(df[col])
+            data_type = get_access_data_type(df[col], column_name=col, table_name=table_name)
             columns.append(f"[{clean_col}] {data_type}")
         
         # Generate SQL statement
@@ -334,7 +338,10 @@ def create_access_table(cursor, table_name, df):
             columns = []
             for col in df.columns:
                 clean_col = column_map[col]
-                columns.append(f"[{clean_col}] TEXT(255)")
+                if table_name == "List of Pipe Tally" and col == "Log distance (m)":
+                    columns.append(f"[{clean_col}] DOUBLE")
+                else:
+                    columns.append(f"[{clean_col}] TEXT(255)")
             
             create_table_sql = f"CREATE TABLE [{table_name}] ({', '.join(columns)})"
             cursor.execute(create_table_sql)
@@ -408,32 +415,42 @@ def create_access_database(file_path):
 
 def convert_data_types(df):
     """Convert data types of specific columns."""
+    
+    for col in df.columns:
+        if "Log distance" in col or "distance" in col.lower():
+            print(f"  - {col}: {df[col].dtype}")
 
-    if "Log distance [m]" in df.columns:
-        df["Log distance [m]"] = pd.to_numeric(df["Log distance [m]"], errors='coerce').round(3)
+    if "Log distance (m)" in df.columns:
+        df["Log distance (m)"] = pd.to_numeric(df["Log distance (m)"], errors='coerce').round(3)
     
     # List of columns to process for three decimal places
-    columns_three_decimal = ["Altitude [m]", "Joint / component length [m]", "Abs. Dist. to upstream weld [m]", "Remaining thickness [mm]"]
+    columns_three_decimal = ["Altitude (m)", "Joint / component length (m)", "Abs. Dist. to upstream weld (m)", "Remaining thickness (mm)"]
     
     for col in columns_three_decimal:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').round(3).apply(lambda x: f"{x:.3f}" if pd.notnull(x) else None)
 
-    columns_two_decimal = ["Nominal Internal diameter [mm]", "Max. depth [mm]"]
+    # List of columns to process for two decimal places
+    columns_two_decimal = ["Nominal Internal diameter (mm)", "Max. depth (mm)"]
     
     for col in columns_two_decimal:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round_two_decimal).apply(lambda x: f"{x:.2f}" if pd.notnull(x) else None)
 
-    if "Max. depth [%]" in df.columns:
-        df["Max. depth [%]"] = df["Max. depth [%]"].apply(custom_round_max_depth)
+    if "Max. depth (%)" in df.columns:
+        df["Max. depth (%)"] = df["Max. depth (%)"].apply(custom_round_max_depth)
 
-    numeric_columns_to_round = ["Length [mm]", "Width [mm]"]
+    # Columns that should remain as integers
+    numeric_columns_to_round = ["Length (mm)", "Width (mm)"]
     for col in numeric_columns_to_round:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round).apply(lambda x: str(int(x)) if pd.notnull(x) else None)
+    
+    # Convert other columns to string
+    processed_columns = ["Log distance (m)"] + columns_three_decimal + columns_two_decimal + numeric_columns_to_round + ["Max. depth (%)"]
+    
     for col in df.columns:
-        if col not in ["Log distance [m]"] + columns_three_decimal + columns_two_decimal + numeric_columns_to_round + ["Max. depth [%]"]:
+        if col not in processed_columns:
             df[col] = df[col].astype(str).replace({'nan': None, 'None': None, '': None}).where(pd.notnull(df[col]), None)
  
     return df
@@ -757,7 +774,7 @@ def apply_selected_headers_to_dataframe(df, selected_headers_or_mappings, sheet_
                 if excel_header and excel_header in current_columns:
                     new_df_data[std_header] = df[excel_header].copy()
                     used_original_columns.append(excel_header)
-                    print(f"    ✅ {std_header} <- {excel_header}")
+                    print(f"    ✅ {std_header} <- {excel_header} (Type: {df[excel_header].dtype})")
                 else:
                     new_df_data[std_header] = [None] * len(df)
                     if excel_header:
@@ -779,9 +796,10 @@ def apply_selected_headers_to_dataframe(df, selected_headers_or_mappings, sheet_
                             break
                 
                 if matched_column:
+                    # Copy data without converting data type
                     new_df_data[header] = df[matched_column].copy()
                     used_original_columns.append(matched_column)
-                    print(f"  ✅ '{header}' <-- '{matched_column}'")
+                    print(f"  ✅ '{header}' <-- '{matched_column}' (Type: {df[matched_column].dtype})")
                 else:
                     new_df_data[header] = [None] * len(df)
                     print(f"  ⚠️ '{header}' <-- [EMPTY - No Match Found]")
@@ -806,8 +824,8 @@ def apply_selected_headers_to_dataframe(df, selected_headers_or_mappings, sheet_
             temp_counter = 1
             for orig_col in remaining_columns:
                 temp_name = f"TempData{temp_counter}"
-                new_df_data[temp_name] = df[orig_col].copy()
-                print(f"    📦 {temp_name} <- {orig_col}")
+                new_df_data[temp_name] = df[orig_col].copy()  # Copy without conversion
+                print(f"    📦 {temp_name} <- {orig_col} (Type: {df[orig_col].dtype})")
                 temp_counter += 1
         else:
             print("📋 No remaining columns - no TempData to add")
