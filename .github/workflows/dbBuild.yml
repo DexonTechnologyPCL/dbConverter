@@ -40,7 +40,7 @@ jobs:
           
       - name: Compile the Script
         run: |
-          pyinstaller --name=ExcelToAccessDB --onefile --add-data "resoure\header.xlsx;resoure" ExcelToAccessDB.py
+          pyinstaller --name=ExcelToAccessDB --onefile --windowed --add-data "ExcelToAccessDB.py;." --add-data "resoure\header.xlsx;resoure" --hidden-import=ExcelToAccessDB SelectHeaderNamesfromExcel.py
 
       - name: Delete existing release
         shell: pwsh
