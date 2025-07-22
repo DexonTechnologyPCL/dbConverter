@@ -525,18 +525,18 @@ def create_new_tables(cursor):
     # Create table PipelineParameters
     try:
         cursor.execute("""CREATE TABLE [PipelineParameters] (
-                                        [Outside Diameter] DOUBLE,
+                                        [Outside Diameter] TEXT(255),
                                         [pipelineMaterial] TEXT(255),
-                                        [NW Thickness] DOUBLE,
+                                        [NW Thickness] TEXT(255),
                                         [pipeline Class] TEXT(255),
-                                        [Internal Diameter] DOUBLE,
-                                        [pipe length] DOUBLE,
+                                        [Internal Diameter] TEXT(255),
+                                        [pipe length] TEXT(255),
                                         [const Code] TEXT(255),
-                                        [Max AlloOperPres] DOUBLE,
-                                        [Design Press] DOUBLE,
-                                        [SMYS] DOUBLE,
-                                        [Design Factor] DOUBLE,
-                                        [Construction Year] INTEGER)
+                                        [Max AlloOperPres] TEXT(255),
+                                        [Design Press] TEXT(255),
+                                        [SMYS] TEXT(255),
+                                        [Design Factor] TEXT(255),
+                                        [Construction Year] TEXT(255))
                                         """)
         cursor.commit()
         print("Successfully created table PipelineParameters")
@@ -546,21 +546,21 @@ def create_new_tables(cursor):
     # Create table DataQuality
     try:
         cursor.execute("""CREATE TABLE [DataQuality] (
-                                        [Inspection Direction] DOUBLE,
+                                        [Inspection Direction] TEXT(255),
                                         [Launching Date] DATETIME,
                                         [Receiving Date] DATETIME,
-                                        [Duration] DOUBLE,
+                                        [Duration] TEXT(255),
                                         [Inspect Medium] TEXT(255),
-                                        [Pres during run] DOUBLE,
-                                        [Flowrate] DOUBLE,
+                                        [Pres during run] TEXT(255),
+                                        [Flowrate] TEXT(255),
                                         [Disc CupWear] TEXT(255),
                                         [Debris] TEXT(255),
                                         [Damage] TEXT(255),
-                                        [Start Data Record] DOUBLE,
-                                        [End Data Record] DOUBLE,
-                                        [Min Velocity Record] DOUBLE,
-                                        [Max Velocity Record] DOUBLE,
-                                        [Size Record] DOUBLE,
+                                        [Start Data Record] TEXT(255),
+                                        [End Data Record] TEXT(255),
+                                        [Min Velocity Record] TEXT(255),
+                                        [Max Velocity Record] TEXT(255),
+                                        [Size Record] TEXT(255),
                                         [Date Received Headquarters] DATETIME)
                                         """)
         cursor.commit()
