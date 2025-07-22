@@ -554,14 +554,13 @@ def create_new_tables(cursor):
                                         [Pres during run] DOUBLE,
                                         [Flowrate] DOUBLE,
                                         [Disc CupWear] TEXT(255),
-                                        [Max AlloOperPres] DOUBLE,
                                         [Debris] TEXT(255),
                                         [Damage] TEXT(255),
-                                        [start data record] DOUBLE,
-                                        [end data record] DOUBLE,
-                                        [min velocity record] DOUBLE,
-                                        [max velocity record] DOUBLE,
-                                        [size Record] DOUBLE,
+                                        [Start Data Record] DOUBLE,
+                                        [End Data Record] DOUBLE,
+                                        [Min Velocity Record] DOUBLE,
+                                        [Max Velocity Record] DOUBLE,
+                                        [Size Record] DOUBLE,
                                         [Date Received Headquarters] DATETIME)
                                         """)
         cursor.commit()
