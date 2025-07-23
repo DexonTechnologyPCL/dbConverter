@@ -516,7 +516,7 @@ def create_new_tables(cursor):
                                         [Pipeline Designation] TEXT(255),
                                         [Product] TEXT(255),
                                         [Revision] TEXT(255))
-                                        """)
+                                        """) 
         cursor.commit()
         print("Successfully created table ClientInspection")
     except Exception as e:
@@ -568,7 +568,125 @@ def create_new_tables(cursor):
     except Exception as e:
         print(f"Unable to create table DataQuality: {str(e)}")
 
-def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_modes=None):
+def add_header_mapping_to_access(cursor, mapping_content):
+    """Add HeaderMapping table with structured data to Access database"""
+    try:
+        # Create HeaderMapping table (drop if exists)
+        try:
+            cursor.execute("DROP TABLE HeaderMapping")
+            print("🔄 Dropped existing HeaderMapping table")
+        except:
+            pass  # Table doesn't exist
+        
+        # Create structured HeaderMapping table
+        create_table_sql = """
+        CREATE TABLE HeaderMapping (
+            SheetName TEXT(100),
+            StandardHeader TEXT(255),
+            ExcelHeader TEXT(255)
+        )
+        """
+        
+        cursor.execute(create_table_sql)
+        print("✅ Created HeaderMapping table in Access DB")
+        
+        # Parse mapping_content to extract structured data
+        records = []
+        current_sheet = None
+        
+        lines = mapping_content.split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            
+            # Detect sheet name
+            if line.startswith('📋 SHEET:'):
+                current_sheet = line.replace('📋 SHEET:', '').strip()
+                continue
+                
+            # Skip if no current sheet
+            if not current_sheet:
+                continue
+                
+            # Parse standard header mappings (format: "Standard Header >> Excel Header")
+            if '>>' in line and not line.startswith('-'):
+                parts = line.split('>>')
+                if len(parts) == 2:
+                    standard_header = parts[0].strip()
+                    excel_header = parts[1].strip()
+                    
+                    # Handle empty mappings
+                    if excel_header == "[Empty - Will create empty column]":
+                        excel_header = None
+                    
+                    records.append({
+                        'SheetName': current_sheet,
+                        'StandardHeader': standard_header,
+                        'ExcelHeader': excel_header
+                    })
+            
+            # Parse TempData mappings (format: "TempData1 << Original Column")
+            elif '<<' in line and line.startswith('TempData'):
+                parts = line.split('<<')
+                if len(parts) == 2:
+                    temp_data_name = parts[0].strip()
+                    original_column = parts[1].strip()
+                    
+                    records.append({
+                        'SheetName': current_sheet,
+                        'StandardHeader': temp_data_name,
+                        'ExcelHeader': original_column
+                    })
+            
+            # Parse new columns for List of Pipe Tally
+            elif current_sheet == "List of Pipe Tally" and line in ['Velocity (m/s)', 'ImgPath1', 'ImgPath2', 'Timestr']:
+                records.append({
+                    'SheetName': current_sheet,
+                    'StandardHeader': line,
+                    'ExcelHeader': None
+                })
+            
+            # Parse original headers for unconfigured sheets
+            elif line.startswith('  ') and '. ' in line and current_sheet:
+                # Check if this is from an unconfigured sheet
+                if any('Not Configured' in prev_line for prev_line in lines[max(0, lines.index(line)-10):lines.index(line)]):
+                    # Extract header name (format: "  1. Header Name")
+                    try:
+                        header_part = line.split('. ', 1)
+                        if len(header_part) == 2:
+                            header_name = header_part[1].strip()
+                            
+                            records.append({
+                                'SheetName': current_sheet,
+                                'StandardHeader': header_name,
+                                'ExcelHeader': header_name
+                            })
+                    except:
+                        pass
+        
+        # Insert mapping records
+        insert_sql = """
+        INSERT INTO HeaderMapping (SheetName, StandardHeader, ExcelHeader) 
+        VALUES (?, ?, ?)
+        """
+        
+        for record in records:
+            cursor.execute(insert_sql, (
+                record['SheetName'],
+                record['StandardHeader'], 
+                record['ExcelHeader']
+            ))
+        
+        print(f"✅ Added {len(records)} HeaderMapping records to Access DB")
+        print(f"   📋 Structured mapping information stored in table")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error creating HeaderMapping table: {str(e)}")
+        return False
+
+def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_modes=None, header_mapping_content=None):
     check_List_Pipe = False
     check_List_Nominal = False
     pipeTallyColumns = []  
@@ -726,6 +844,9 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
        
         create_new_tables(cursor)
 
+        if header_mapping_content:
+            add_header_mapping_to_access(cursor, header_mapping_content)
+
         conn.commit()
         print("Excel to Access conversion completed successfully")
         return True
@@ -810,11 +931,10 @@ def apply_selected_headers_to_dataframe(df, selected_headers_or_mappings, sheet_
         if sheet_name == "List of Pipe Tally":
             print(f"📌 Adding 5 new columns (Sheet: {sheet_name})...")
             new_df_data['Velocity (m/s)'] = [None] * len(df)
-            new_df_data['DigSheet'] = [None] * len(df)
             new_df_data['ImgPath1'] = [None] * len(df)
             new_df_data['ImgPath2'] = [None] * len(df)
             new_df_data['Timestr'] = [None] * len(df)
-            print(f"✅ Added: Velocity (m/s), DigSheet, ImgPath1, ImgPath2, Timestr")
+            print(f"✅ Added: Velocity (m/s), ImgPath1, ImgPath2, Timestr")
         else:
             print(f"📋 Skipping new columns (Sheet: {sheet_name} - not 'List of Pipe Tally')")
         
