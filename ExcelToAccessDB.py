@@ -510,7 +510,7 @@ def create_new_tables(cursor):
                                         [Project no] TEXT(255),
                                         [Project] TEXT(255),
                                         [Client] TEXT(255),
-                                        [Inspection Date] DATETIME,
+                                        [Inspection Date] TEXT(255),
                                         [Launcher] TEXT(255),
                                         [Receiver] TEXT(255),
                                         [Pipeline Designation] TEXT(255),
@@ -547,8 +547,8 @@ def create_new_tables(cursor):
     try:
         cursor.execute("""CREATE TABLE [DataQuality] (
                                         [Inspection Direction] TEXT(255),
-                                        [Launching Date] DATETIME,
-                                        [Receiving Date] DATETIME,
+                                        [Launching Date] TEXT(255),
+                                        [Receiving Date] TEXT(255),
                                         [Duration] TEXT(255),
                                         [Inspect Medium] TEXT(255),
                                         [Pres during run] TEXT(255),
@@ -561,7 +561,7 @@ def create_new_tables(cursor):
                                         [Min Velocity Record] TEXT(255),
                                         [Max Velocity Record] TEXT(255),
                                         [Size Record] TEXT(255),
-                                        [Date Received Headquarters] DATETIME)
+                                        [Date Received Headquarters] TEXT(255))
                                         """)
         cursor.commit()
         print("Successfully created table DataQuality")
