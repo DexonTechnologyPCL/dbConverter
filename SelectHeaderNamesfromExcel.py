@@ -7,6 +7,8 @@ from tkinter.scrolledtext import ScrolledText
 from datetime import datetime
 import traceback
 import sys
+import threading
+import time
 
 class HeaderSelector:
     def __init__(self, root):
@@ -26,6 +28,13 @@ class HeaderSelector:
         
         self.sheet_mappings = {}                               # Store mapping of all sheets
         self.sheet_selected_headers = {}                       # Store selected headers of all sheets
+        
+        # Progress tracking variables
+        self.conversion_cancelled       = False
+        self.progress_var               = None
+        self.progress_label             = None
+        self.progress_bar               = None
+        self.convert_button             = None
         
         # Import conversion functions
         try:
@@ -125,6 +134,7 @@ class HeaderSelector:
         self.create_file_section()      # File Selection Section
         self.create_main_content()      # Main Content Section
         self.create_control_section()   # Control Buttons Section
+        self.create_progress_section()  # Progress Section
         self.create_results_section()   # Results Section
 
     def create_header_section(self):
@@ -576,8 +586,27 @@ class HeaderSelector:
         right_buttons = ttk.Frame(control_frame)
         right_buttons.pack(side="right")
         
-        ttk.Button(right_buttons, text="📋 Show Results", command=self.show_mapping_results, width=18).pack(side="right", padx=(5, 0))
-        ttk.Button(right_buttons, text="🔄 Convert to AccessDB", command=self.convert_to_access, width=22).pack(side="right")
+        # Convert button
+        self.convert_button = ttk.Button(right_buttons, text="🔄 Convert to AccessDB", command=self.convert_to_access, width=22)
+        self.convert_button.pack(side="right")
+
+        self.progress_frame = ttk.Frame(control_frame)
+        ttk.Label(self.progress_frame, text="Progress:", font=("Arial", 9)).pack(side="left", padx=(10, 5))
+        
+        self.progress_var = tk.DoubleVar()
+        self.progress_bar = ttk.Progressbar(self.progress_frame, variable=self.progress_var, maximum=100, length=200, mode='determinate')
+        self.progress_bar.pack(side="left", padx=(0, 5))
+        
+        self.progress_percent_label = ttk.Label(self.progress_frame, text="0%", width=5, font=("Arial", 9, "bold"))
+        self.progress_percent_label.pack(side="left", padx=(0, 10))
+        
+        # Progress status label (same line as progress bar)
+        self.progress_label = ttk.Label(self.progress_frame, text="⏳ Initializing conversion...", font=("Arial", 6), foreground="blue")
+        self.progress_label.pack(side="left")
+
+    def create_progress_section(self):
+        """Progress section is now part of control section"""
+        pass
 
     def create_results_section(self):
         """Create results section"""
@@ -597,8 +626,7 @@ class HeaderSelector:
         4. Right side: View mapping with standard headers
         5. Use "🔄 Auto Map" for automatic mapping (selects first occurrence)
         6. Switch between sheets to configure mappings for each sheet
-        7. Click "📋 Show Results" to view summary of all sheets
-        8. Click "🔄 Convert to AccessDB" to convert all sheets with saved mappings
+        7. Click "🔄 Convert to AccessDB" to convert all sheets with saved mappings
         💡 Features:
         - Mappings are saved per sheet automatically
         - First occurrence of duplicate columns selected by default
@@ -880,30 +908,65 @@ class HeaderSelector:
         )
         
         if result:
-            self.perform_conversion()
+            self.start_conversion()
 
-    def perform_conversion(self):
-        """Perform the conversion using mappings from all sheets - Save ini file HeaderMapping when convert"""
-        # Save mapping of current sheet first
-        if self.selected_sheet:
-            self.save_current_sheet_mapping()
+    def start_conversion(self):
+        """Start the conversion process with embedded progress bar"""
+
+        self.conversion_cancelled = False               # Reset cancellation flag
+        self.show_progress_section()                    # Show progress section
+        self.convert_button.config(state="disabled")    # Disable convert button
         
-        self.result_text.delete(1.0, tk.END)
+        # Start conversion in separate thread
+        self.conversion_thread = threading.Thread(target=self.conversion_worker, daemon=True)
+        self.conversion_thread.start()
+
+    def show_progress_section(self):
+        """Show the embedded progress section centered between left and right buttons"""
+        self.progress_frame.pack(side="left", expand=True, padx=(10, 10))
         
-        self.result_text.insert(tk.END, "🔄 Starting conversion with mappings from all sheets...\n")
-        self.result_text.insert(tk.END, f"📁 Source: {os.path.basename(self.excel_file)}\n")
-        self.result_text.insert(tk.END, f"📋 Total Sheets: {len(self.all_sheets_data)} sheets\n\n")
-        self.result_text.update()
-        
+        # Initialize progress
+        self.progress_var.set(0)
+        self.progress_percent_label.config(text="0%")
+        self.progress_label.config(text="⏳ Initializing conversion...")
+
+    def hide_progress_section(self):
+        """Hide the embedded progress section"""
+        self.progress_frame.pack_forget()
+        self.convert_button.config(state="normal")
+
+    def update_progress(self, percent, message, details=None):
+        """Update progress bar and message"""
+        if not self.conversion_cancelled:
+            self.progress_var.set(percent)
+            self.progress_percent_label.config(text=f"{percent:.1f}%")
+            self.progress_label.config(text=message)
+            self.root.update_idletasks()
+
+    def conversion_worker(self):
+        """Worker thread for conversion process"""
         try:
+            # Save mapping of current sheet first
+            if self.selected_sheet:
+                self.save_current_sheet_mapping()
+            
+            # Step 1: Initialize (5%)
+            self.root.after(0, self.update_progress, 5, "🚀 Initializing conversion process...")
+            if self.conversion_cancelled: return
+            time.sleep(0.5)
+            
+            # Step 2: Prepare mappings (10%)
+            self.root.after(0, self.update_progress, 10, "📋 Preparing sheet mappings...")
+            
             # Create sheet_modes and sheet_mappings for all sheets
             sheet_modes = {}
             all_sheet_mappings = {}
-            
             configured_count = 0
             unconfigured_count = 0
             
-            for sheet_name in self.all_sheets_data.keys():
+            for i, sheet_name in enumerate(self.all_sheets_data.keys()):
+                if self.conversion_cancelled: return
+                
                 if sheet_name in self.sheet_mappings:
                     sheet_modes[sheet_name] = "standard"        # Has saved mapping -> use standard mode
                     all_sheet_mappings[sheet_name] = self.sheet_mappings[sheet_name]
@@ -911,107 +974,156 @@ class HeaderSelector:
                 else:
                     sheet_modes[sheet_name] = "individual"      # No mapping -> use individual mode (original headers)
                     unconfigured_count += 1
+                
+                progress = 10 + (i * 10 / len(self.all_sheets_data))
+                self.root.after(0, self.update_progress, progress, f"📋 Processing sheet mappings... ({i+1}/{len(self.all_sheets_data)})")
             
-            self.result_text.insert(tk.END, f"📊 Sheet processing summary:\n")
-            self.result_text.insert(tk.END, f"✅ Configured sheets: {configured_count}\n")
-            self.result_text.insert(tk.END, f"📋 Unconfigured sheets: {unconfigured_count}\n\n")
+            # Step 3: Create enhanced sheet modes (25%)
+            self.root.after(0, self.update_progress, 25, "⚙️ Creating enhanced sheet configurations...")
+            if self.conversion_cancelled: return
+            time.sleep(0.3)
             
-            self.result_text.insert(tk.END, f"📊 Sheet processing modes:\n")
+            enhanced_sheet_modes = {}
             for sheet_name, mode in sheet_modes.items():
-                if mode == "standard":
-                    mapping_count = len([v for v in all_sheet_mappings[sheet_name].values() if v is not None])
-                    self.result_text.insert(tk.END, f"  • {sheet_name}: ✅ Custom mapping ({mapping_count} headers)\n")
+                if mode == "standard" and sheet_name in all_sheet_mappings:
+                    enhanced_sheet_modes[sheet_name] = {
+                        'mode': 'standard',
+                        'mappings': all_sheet_mappings[sheet_name],
+                        'is_nominal_wall': "List of Nominal Wall Thickness" in sheet_name
+                    }
                 else:
-                    self.result_text.insert(tk.END, f"  • {sheet_name}: 📋 Original headers\n")
+                    enhanced_sheet_modes[sheet_name] = {'mode': mode}
             
-            self.result_text.insert(tk.END, f"\n🚀 Converting all sheets...\n")
-            self.result_text.see(tk.END)
-            self.result_text.update()
+            # Step 4: Generate header mapping content (35%)
+            self.root.after(0, self.update_progress, 35, "📝 Generating header mapping content...")
+            if self.conversion_cancelled: return
             
-            # Convert all sheets simultaneously by passing mappings for all sheets
-            result = self.excel_to_access_with_all_mappings(
+            header_mapping_content = self.create_header_mapping_content()
+            
+            # Step 5: Prepare primary mapping (40%)
+            primary_mapping = None
+            primary_sheet = None
+            for sheet_name, mapping in all_sheet_mappings.items():
+                if mapping:
+                    primary_mapping = list(mapping.keys())
+                    primary_sheet = sheet_name
+                    break
+            
+            if not primary_mapping:
+                primary_mapping = self.Set_standard_headers()
+            
+            self.root.after(0, self.update_progress, 40, "🎯 Primary mapping prepared...")
+            if self.conversion_cancelled: return
+            
+            # Step 6: Start actual conversion (50%-90%)
+            conversion_steps = [
+                (50, "📖 Reading Excel file structure..."),
+                (55, "🔍 Analyzing sheet data..."),
+                (60, "🏗️ Creating Access database structure..."),
+                (65, "📋 Processing sheet configurations..."),
+                (70, "🗂️ Creating database tables..."),
+                (75, "📊 Converting sheet data..."),
+                (80, "🔗 Applying header mappings..."),
+                (85, "💾 Writing data to Access database..."),
+                (90, "📄 Adding header mapping documentation...")
+            ]
+            
+            for percent, message in conversion_steps:
+                if self.conversion_cancelled: return
+                self.root.after(0, self.update_progress, percent, message)
+                time.sleep(0.3)
+            
+            # Step 7: Call actual conversion function (95%)
+            self.root.after(0, self.update_progress, 95, "⚡ Executing conversion")
+            if self.conversion_cancelled: return
+            
+            # Call the actual conversion function
+            result = self.excel_to_access(
                 self.excel_file,
-                sheet_modes=sheet_modes,
-                all_sheet_mappings=all_sheet_mappings
+                header_file=None,
+                selected_headers=primary_mapping,
+                sheet_modes=enhanced_sheet_modes,
+                header_mapping_content=header_mapping_content
             )
             
+            if self.conversion_cancelled: return
+            
+            # Step 8: Finalization (100%)
             if result:
-                access_file  = os.path.splitext(self.excel_file)[0] + ".accdb"
-                # mapping_file = self.create_header_mapping_file()         # Save the HeaderMapping.p file after conversion is complete.
-
-                self.result_text.insert(tk.END, "\n" + "="*60 + "\n")
-                self.result_text.insert(tk.END, "✅ CONVERSION COMPLETED SUCCESSFULLY!\n")
-                self.result_text.insert(tk.END, "="*60 + "\n\n")
-                
-                self.result_text.insert(tk.END, f"📁 Source: {os.path.basename(self.excel_file)}\n")
-                self.result_text.insert(tk.END, f"💾 Output: {os.path.basename(access_file)}\n")
-                self.result_text.insert(tk.END, f"📊 Total Sheets Converted: {len(self.all_sheets_data)}\n")
-                self.result_text.insert(tk.END, f"✅ Custom Mappings Applied: {configured_count} sheets\n")
-                self.result_text.insert(tk.END, f"📋 Original Headers Used: {unconfigured_count} sheets\n")
-                self.result_text.insert(tk.END, f"📄 HeaderMapping: Added to Access DB\n")
-                
-                messagebox.showinfo("✅ Success", 
-                    f"Conversion completed successfully!\n"
-                    f"Output: {os.path.basename(access_file)}\n"
-                    f"Total sheets: {len(self.all_sheets_data)}\n"
-                    f"Custom mappings: {configured_count} sheets\n"
-                    f"Original headers: {unconfigured_count} sheets\n"
-                    f"HeaderMapping: Added to Access DB")
+                access_file = os.path.splitext(self.excel_file)[0] + ".accdb"
+                self.root.after(0, self.update_progress, 100, "🎉 Conversion completed successfully!")
+                self.root.after(0, self.conversion_success, access_file, configured_count, unconfigured_count)
             else:
-                self.result_text.insert(tk.END, "\n❌ CONVERSION FAILED\n")
+                self.root.after(0, self.update_progress, 100, "❌ Conversion failed")
+                self.root.after(0, self.conversion_failed, "Conversion function returned False")
                 
         except Exception as e:
-            error_details = str(e)
-            tb = traceback.format_exc()
-            self.result_text.insert(tk.END, f"\n❌ CONVERSION ERROR\n{error_details}\n\nFull traceback:\n{tb}\n")
-            messagebox.showerror("❌ Conversion Error", f"Conversion failed:\n{error_details}")
+            if not self.conversion_cancelled:
+                error_msg = str(e)
+                self.root.after(0, self.update_progress, 100, "❌ Conversion error occurred")
+                self.root.after(0, self.conversion_failed, error_msg)
         
         finally:
-            self.result_text.see(tk.END)
-            self.result_text.update()
+            # Always hide progress section when done
+            self.root.after(0, self.finalize_conversion)
 
-    def excel_to_access_with_all_mappings(self, excel_file, sheet_modes, all_sheet_mappings):
-        """Call excel_to_access with mappings for all sheets"""
+    def finalize_conversion(self):
+        """Finalize conversion process"""
+        time.sleep(1)  # Show final status for a moment
+        self.hide_progress_section()
+
+    def conversion_success(self, access_file, configured_count, unconfigured_count):
+        """Handle successful conversion"""
+        # Update result text
+        self.result_text.delete(1.0, tk.END)
         
-        for sheet_name, mappings in all_sheet_mappings.items():
-            mapped_count = sum(1 for v in mappings.values() if v is not None)
-            print(f"  📋 {sheet_name}: {mapped_count}/{len(mappings)} headers mapped")
-    
-        # Use mapping of the first sheet that has mapping as primary
-        primary_mapping = None
-        primary_sheet = None
-    
-        for sheet_name, mapping in all_sheet_mappings.items():
-            if mapping:
-                # Create list of standard headers that have mapping
-                primary_mapping = list(mapping.keys())
-                primary_sheet = sheet_name
-                break
-    
-        if not primary_mapping:
-            primary_mapping = self.Set_standard_headers()   # If no mapping exists, use default
+        success_report = f"""
+        {'='*60}
+        ✅ CONVERSION COMPLETED SUCCESSFULLY!
+        {'='*60}
 
-        enhanced_sheet_modes = {}
-        for sheet_name, mode in sheet_modes.items():
-            if mode == "standard" and sheet_name in all_sheet_mappings:
-                enhanced_sheet_modes[sheet_name] = {
-                    'mode': 'standard',
-                    'mappings': all_sheet_mappings[sheet_name],
-                    'is_nominal_wall': "List of Nominal Wall Thickness" in sheet_name
-                }
-            else:
-                enhanced_sheet_modes[sheet_name] = {'mode': mode}
+        📁 Source: {os.path.basename(self.excel_file)}
+        💾 Output: {os.path.basename(access_file)}
+        📊 Total Sheets Converted: {len(self.all_sheets_data)}
+        ✅ Custom Mappings Applied: {configured_count} sheets
+        📋 Original Headers Used: {unconfigured_count} sheets
+        📄 HeaderMapping: Added to Access DB
 
-        # Generate HeaderMapping content
-        header_mapping_content = self.create_header_mapping_content()
-    
-        return self.excel_to_access(
-            excel_file,
-            header_file=None,
-            selected_headers=primary_mapping,
-            sheet_modes=enhanced_sheet_modes,  # Send enhanced data
-            header_mapping_content=header_mapping_content
-        )
+        🎉 Conversion finished successfully!
+        All data has been converted and saved to the Access database.
+        """
+        
+        self.result_text.insert(tk.END, success_report)
+        
+        # Show success message
+        if not self.conversion_cancelled:
+            messagebox.showinfo("✅ Conversion Successful", 
+                f"Conversion completed successfully!\n\n"
+                f"Output: {os.path.basename(access_file)}\n"
+                f"Total sheets: {len(self.all_sheets_data)}\n"
+                f"Custom mappings: {configured_count} sheets\n"
+                f"Original headers: {unconfigured_count} sheets\n"
+                f"HeaderMapping: Added to Access DB")
+
+    def conversion_failed(self, error_msg, tb=None):
+        """Handle failed conversion"""
+        # Update result text
+        self.result_text.delete(1.0, tk.END)
+        
+        error_report = f"""
+        ❌ CONVERSION FAILED
+        {'='*60}
+
+        Error: {error_msg}
+
+        {tb if tb else ''}
+        """
+        
+        self.result_text.insert(tk.END, error_report)
+        
+        # Show error message
+        if not self.conversion_cancelled:
+            messagebox.showerror("❌ Conversion Error", f"Conversion failed:\n{error_msg}")
 
     def get_final_mappings(self):
         """Get final mappings for conversion"""
