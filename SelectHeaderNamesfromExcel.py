@@ -97,9 +97,9 @@ class HeaderSelector:
         # Create custom dialog
         dialog = tk.Toplevel(self.root)
         dialog.title("🎉 Conversion Complete")
-        dialog.geometry("400x350")
+        dialog.geometry("400x360")
         dialog.resizable(True, True)
-        dialog.minsize(400, 350)
+        dialog.minsize(400, 360)
         dialog.withdraw()
 
         # Center the dialog
@@ -130,12 +130,11 @@ class HeaderSelector:
         # Configure grid weights for better spacing
         info_frame.grid_columnconfigure(1, weight=1)
         
-        # Database info with smaller fonts
-        ttk.Label(info_frame, text="📁   Source File:", font=("Arial", 7, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=2)
+        ttk.Label(info_frame, text="📂  Source File:", font=("Arial", 7, "bold")).grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=2)
         source_label = ttk.Label(info_frame, text=os.path.basename(self.excel_file), font=("Arial", 7), wraplength=250)
         source_label.grid(row=0, column=1, sticky="w", pady=2)
-        
-        ttk.Label(info_frame, text="💾   Database File:", font=("Arial", 7, "bold")).grid(row=1, column=0, sticky="w", padx=(0, 8), pady=2)
+
+        ttk.Label(info_frame, text="📋   Database File:", font=("Arial", 7, "bold")).grid(row=1, column=0, sticky="w", padx=(0, 8), pady=2)
         db_label = ttk.Label(info_frame, text=os.path.basename(access_file), font=("Arial", 7), wraplength=250)
         db_label.grid(row=1, column=1, sticky="w", pady=2)
         
@@ -147,7 +146,16 @@ class HeaderSelector:
         
         ttk.Label(info_frame, text="📋   Original Headers:", font=("Arial", 7, "bold")).grid(row=4, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(info_frame, text=f"{unconfigured_count} sheets", font=("Arial", 7)).grid(row=4, column=1, sticky="w", pady=2)
+       
+        ttk.Label(info_frame, text="📄   HeaderMapping:", font=("Arial", 7, "bold")).grid(row=5, column=0, sticky="w", padx=(0, 8), pady=2)
         
+        has_mapping = len(self.sheet_mappings) > 0 or len(self.all_sheets_data) > 0
+        
+        if has_mapping:
+            ttk.Label(info_frame, text="Added to Access DB", font=("Arial", 7)).grid(row=5, column=1, sticky="w", pady=2)
+        else:
+            ttk.Label(info_frame, text="Not created", font=("Arial", 7)).grid(row=5, column=1, sticky="w", pady=2)
+
         # File path frame with smaller padding
         path_frame = ttk.LabelFrame(main_frame, text="📂 Database Location", padding="6", style="Small.TLabelframe")
         path_frame.pack(fill="x", pady=(0, 10))
@@ -189,7 +197,7 @@ class HeaderSelector:
         open_btn = ttk.Button(button_frame, text="📂 Open Location", command=on_open_location, width=18, style="Small.TButton")
         open_btn.pack(side="left", padx=(0, 8))
         
-        close_btn = ttk.Button(button_frame, text="✅ Close", command=on_close, width=12, style="Small.TButton")
+        close_btn = ttk.Button(button_frame, text="❌ Close", command=on_close, width=12, style="Small.TButton")
         close_btn.pack(side="right")
         
         open_btn.focus_set()        # Set focus to Open button
