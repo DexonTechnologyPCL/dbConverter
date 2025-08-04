@@ -9,6 +9,8 @@ import traceback
 import sys
 import threading
 import time
+import subprocess
+import platform
 
 class HeaderSelector:
     def __init__(self, root):
@@ -40,6 +42,10 @@ class HeaderSelector:
         self.progress_bar               = None
         self.convert_button             = None
         
+        # Database file tracking
+        self.last_converted_db_path = ""                       # Store last converted database path
+        self.opening_location = False                          # Flag to prevent multiple opens
+        
         # Import conversion functions
         try:
             from ExcelToAccessDB import excel_to_access
@@ -53,6 +59,185 @@ class HeaderSelector:
         self.setup_ui()                             # Create UI
         self.setup_styles()                         # Set style
         self.check_and_auto_load_recent_file()      # Check for recently opened Excel file and try to auto-load
+
+    def open_database_location(self, db_path):
+        """Open the folder containing the database file"""
+        
+        # Prevent multiple simultaneous opens
+        if hasattr(self, 'opening_location') and self.opening_location:
+            return False
+            
+        self.opening_location = True
+        
+        try:
+            if not os.path.exists(db_path):
+                messagebox.showerror("❌ Error", f"Database file not found:\n{db_path}")
+                return False
+            
+            # Get directory path
+            dir_path = os.path.dirname(os.path.abspath(db_path))
+            os.startfile(dir_path)
+            
+            return True
+            
+        except Exception as e:
+            messagebox.showerror("❌ Error", f"Cannot open database location:\n{str(e)}")
+            return False
+            
+        finally:
+            self.opening_location = False
+
+    def open_database_in_windows_explorer(self, db_path):
+        """Redirect to single method"""
+        return self.open_database_location(db_path)
+
+    def show_conversion_complete_dialog(self, access_file, configured_count, unconfigured_count):
+        """Show completion dialog with option to open database location"""
+        
+        # Create custom dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("🎉 Conversion Complete")
+        dialog.geometry("400x350")
+        dialog.resizable(True, True)
+        dialog.minsize(400, 350)
+        dialog.withdraw()
+
+        # Center the dialog
+        dialog.transient(self.root)
+        # dialog.grab_set()
+        
+        # Main frame with smaller padding
+        main_frame = ttk.Frame(dialog, padding="5")
+        main_frame.pack(fill="both", expand=True)
+        
+        # Success icon and title
+        title_frame = ttk.Frame(main_frame)
+        title_frame.pack(fill="x", pady=(0, 5))
+        
+        style = ttk.Style()
+        style.configure("Small.TLabelframe.Label", font=("Arial", 7))
+
+        success_label = ttk.Label(title_frame, text="🎉", font=("Arial", 11))
+        success_label.pack()
+        
+        title_label = ttk.Label(title_frame, text="Conversion Completed Successfully!", font=("Arial", 7, "bold"), foreground="green")
+        title_label.pack(pady=(3, 0))
+
+        # Information frame with smaller padding
+        info_frame = ttk.LabelFrame(main_frame, text="📊 Conversion Summary", padding="6", style="Small.TLabelframe")
+        info_frame.pack(fill="x", pady=(0, 10))
+        
+        # Configure grid weights for better spacing
+        info_frame.grid_columnconfigure(1, weight=1)
+        
+        # Database info with smaller fonts
+        ttk.Label(info_frame, text="📁   Source File:", font=("Arial", 7, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=2)
+        source_label = ttk.Label(info_frame, text=os.path.basename(self.excel_file), font=("Arial", 7), wraplength=250)
+        source_label.grid(row=0, column=1, sticky="w", pady=2)
+        
+        ttk.Label(info_frame, text="💾   Database File:", font=("Arial", 7, "bold")).grid(row=1, column=0, sticky="w", padx=(0, 8), pady=2)
+        db_label = ttk.Label(info_frame, text=os.path.basename(access_file), font=("Arial", 7), wraplength=250)
+        db_label.grid(row=1, column=1, sticky="w", pady=2)
+        
+        ttk.Label(info_frame, text="📊   Total Sheets:", font=("Arial", 7, "bold")).grid(row=2, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(info_frame, text=str(len(self.all_sheets_data)), font=("Arial", 7)).grid(row=2, column=1, sticky="w", pady=2)
+        
+        ttk.Label(info_frame, text="✅   Custom Mappings:", font=("Arial", 7, "bold")).grid(row=3, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(info_frame, text=f"{configured_count} sheets", font=("Arial", 7)).grid(row=3, column=1, sticky="w", pady=2)
+        
+        ttk.Label(info_frame, text="📋   Original Headers:", font=("Arial", 7, "bold")).grid(row=4, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(info_frame, text=f"{unconfigured_count} sheets", font=("Arial", 7)).grid(row=4, column=1, sticky="w", pady=2)
+        
+        # File path frame with smaller padding
+        path_frame = ttk.LabelFrame(main_frame, text="📂 Database Location", padding="6", style="Small.TLabelframe")
+        path_frame.pack(fill="x", pady=(0, 10))
+
+        # Show full path with smaller text widget
+        path_text = tk.Text(path_frame, height=2, wrap=tk.WORD, font=("Consolas", 7), relief="sunken", borderwidth=1, background="#f8f9fa")
+        path_text.pack(fill="x", pady=(2, 0))
+        path_text.insert("1.0", access_file)
+        path_text.config(state="disabled")  # Make read-only
+       
+        # Button frame with smaller padding
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill="x", pady=(8, 0))
+        
+        # Variables to track user choice
+        dialog_closed   = threading.Event()
+        user_action     = [None]    # Use list to make it mutable in nested function
+        action_taken    = [False]   # Prevent multiple actions
+        
+        def on_open_location():
+            if action_taken[0]:  # Prevent multiple clicks
+                return
+            action_taken[0] = True
+            user_action[0]  = 'open_location'
+            dialog_closed.set()
+            dialog.destroy()
+        
+        def on_close():
+            if action_taken[0]:  # Prevent multiple clicks  
+                return
+            action_taken[0] = True
+            user_action[0]  = 'close'
+            dialog_closed.set()
+            dialog.destroy()
+        
+        # Create buttons with smaller sizes
+        style.configure("Small.TButton", font=("Arial", 7))
+
+        open_btn = ttk.Button(button_frame, text="📂 Open Location", command=on_open_location, width=18, style="Small.TButton")
+        open_btn.pack(side="left", padx=(0, 8))
+        
+        close_btn = ttk.Button(button_frame, text="✅ Close", command=on_close, width=12, style="Small.TButton")
+        close_btn.pack(side="right")
+        
+        open_btn.focus_set()        # Set focus to Open button
+        
+        # Add keyboard shortcuts with action protection
+        def on_key_press(event):
+            if action_taken[0]:     # Prevent multiple keyboard actions
+                return
+            if event.keysym == 'Return' or event.keysym == 'KP_Enter':
+                on_open_location()
+            elif event.keysym == 'Escape':
+                on_close()
+        
+        dialog.bind('<Key>', on_key_press)
+        dialog.focus_set()
+        
+        # Handle window close event with action protection
+        def on_window_close():
+            if not action_taken[0]:
+                on_close()
+        
+        dialog.protocol("WM_DELETE_WINDOW", on_window_close)
+        
+        # Center dialog on screen
+        dialog.update_idletasks()
+        screen_width  = dialog.winfo_screenwidth()
+        screen_height = dialog.winfo_screenheight()
+        x = (screen_width // 2) - (dialog.winfo_width() // 2)
+        y = (screen_height // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        dialog.deiconify()
+        dialog.grab_set()
+
+        dialog.wait_window()        # Wait for user choice
+        
+        # Handle user action - always use the enhanced open location method
+        if user_action[0] == 'open_location':
+            print("🎯 User chose to open database location")
+            success = self.open_database_location(access_file)
+            
+            if success:
+                print("✅ Database location opened successfully")
+            else:
+                print("❌ Failed to open database location")
+        else:
+            print("ℹ️ User chose to close dialog without opening location")
+        # For 'close' or None, do nothing
 
     def extract_headers(self, df):
         """Extract headers from DataFrame"""
@@ -1523,6 +1708,7 @@ The saved configurations have been automatically applied.
             # Step 8: Finalization (100%)
             if result:
                 access_file = os.path.splitext(self.excel_file)[0] + ".accdb"
+                self.last_converted_db_path = access_file  # Store database path
                 self.root.after(0, self.update_progress, 100, "🎉 Conversion completed successfully!")
                 self.root.after(0, self.conversion_success, access_file, configured_count, unconfigured_count)
             else:
@@ -1567,15 +1753,9 @@ The saved configurations have been automatically applied.
         
         self.result_text.insert(tk.END, success_report)
         
-        # Show success message
+        # Show custom completion dialog with option to open database location
         if not self.conversion_cancelled:
-            messagebox.showinfo("✅ Conversion Successful", 
-                f"Conversion completed successfully!\n\n"
-                f"Output: {os.path.basename(access_file)}\n"
-                f"Total sheets: {len(self.all_sheets_data)}\n"
-                f"Custom mappings: {configured_count} sheets\n"
-                f"Original headers: {unconfigured_count} sheets\n"
-                f"HeaderMapping: Added to Access DB\n")
+            self.show_conversion_complete_dialog(access_file, configured_count, unconfigured_count)
 
     def conversion_failed(self, error_msg, tb=None):
         """Handle failed conversion"""
@@ -1616,125 +1796,6 @@ The saved configurations have been automatically applied.
         pass
 
     def create_header_mapping_content(self):
-        """Generate HeaderMapping content without adding to Access DB"""
-        if not self.excel_file:
-            return None
-
-        # Save the mapping of the current sheet first
-        if self.selected_sheet:
-            self.save_current_sheet_mapping()
-
-        try:
-            content = f"""Header Mapping Report
-    {'='*80}
-    📁 Source File: {os.path.basename(self.excel_file)}
-    📊 Total Sheets: {len(self.all_sheets_data)}
-    📅 Created: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-    {'='*80}
-
-    """
-        
-            # Loop through each sheet
-            for sheet_name in self.all_sheets_data.keys():
-                content += f"\n📋 SHEET: {sheet_name}\n"
-                content += f"{'─'*60}\n"
-                sheet_type = "List of Nominal Wall Thickness" if "List of Nominal Wall Thickness" in sheet_name else "Standard"
-                content += f"Sheet Type: {sheet_type}\n"
-           
-                standard_headers = self.get_sheet_specific_headers(sheet_name)
-            
-                if sheet_name in self.sheet_mappings:
-                    mappings = self.sheet_mappings[sheet_name]
-                    content += f"Standard Headers: {len(standard_headers)}\n"
-                    content += f"Header Mappings:\n\n"
-                
-                    mapped_count = 0
-                    unmapped_count = 0
-                    tempdata_count = 0
-
-                    content += f"{'Standard Header':<50} >> {'Mapping Column'}\n"
-                    content += f"{'-'*50} >> {'-'*50}\n"
-                
-                    for i, standard_header in enumerate(standard_headers, 1):
-                        mapped_to = mappings.get(standard_header)
-                        if mapped_to:
-                            content += f"{standard_header:<50} >> {mapped_to}\n"
-                            mapped_count += 1
-                        else:
-                            content += f"{standard_header:<50} >> [Empty - Will create empty column]\n"
-                            unmapped_count += 1
-                    
-                    # Find the remaining headers from Excel that are not used
-                    used_headers = [v for v in mappings.values() if v is not None]
-                    all_excel_headers = self.all_sheets_data[sheet_name]
-                    remaining_headers = [h for h in all_excel_headers if h not in used_headers]
-                
-                    if remaining_headers:
-                        content += f"\n📁 REMAINING COLUMNS (will become TempData):\n"
-                        for i, orig_col in enumerate(remaining_headers, 1):
-                            content += f"TempData{i:<3d} << {orig_col}\n"
-                            tempdata_count += 1
-                    else:
-                        content += f"\n📋 No remaining columns - no TempData will be created\n"
-                
-                    # Show new columns for List of Pipe Tally
-                    if sheet_name == "List of Pipe Tally":
-                        content += f"\n🆕 NEW COLUMNS:\n"
-                        new_columns = ['Velocity (m/s)', 'ImgPath1', 'ImgPath2', 'Timestr']
-                        for new_col in new_columns:
-                            content += f"{new_col}\n"
-                            
-                    # Summary for this sheet
-                    content += f"\n📊 Summary: {mapped_count} Mapped, {unmapped_count} Unmapped, {tempdata_count} TempData\n"
-                            
-                else:
-                    # Sheet without mapping
-                    content += f"Status: ⚠️ Not Configured (Original Headers)\n"
-                    available_headers = self.all_sheets_data[sheet_name]
-                    content += f"Will use original Excel headers ({len(available_headers)} columns):\n\n"
-                
-                    for i, header in enumerate(available_headers, 1):
-                        content += f"  {i:2d}. {header}\n"
-        
-            # Overall summary
-            configured_count = len(self.sheet_mappings)
-            unconfigured_count = len(self.all_sheets_data) - configured_count
-        
-            content += f"\n{'='*80}\n"
-            content += f"📈 OVERALL SUMMARY:\n"
-            content += f"{'='*80}\n"
-            content += f"📊 Total Sheets: {len(self.all_sheets_data)}\n"
-            content += f"✅ Configured Sheets: {configured_count}\n"
-            content += f"📋 Unconfigured Sheets: {unconfigured_count}\n"
-        
-            if configured_count > 0:
-                total_mapped = 0
-                total_standards = 0
-                total_tempdata = 0
-            
-                for sheet_name, mappings in self.sheet_mappings.items():
-                    total_mapped += sum(1 for v in mappings.values() if v is not None)
-                    total_standards += len(mappings)
-                
-                    used_headers = [v for v in mappings.values() if v is not None]
-                    all_excel_headers = self.all_sheets_data[sheet_name]
-                    remaining_headers = [h for h in all_excel_headers if h not in used_headers]
-                    total_tempdata += len(remaining_headers)
-            
-                content += f"📋 Total Standard Headers: {total_standards}\n"
-                content += f"✅ Total Mapped Headers: {total_mapped}\n"
-                content += f"📦 Total TempData Columns: {total_tempdata}\n"
-            
-            content += f"\n{'='*80}\n"
-            content += f"🔧 Generated by Header Selector Tool\n"
-            content += f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            content += f"{'='*80}\n"
-            
-            return content
-            
-        except Exception as e:
-            print(f"❌ Error creating HeaderMapping content: {str(e)}")
-            return None
         """Generate HeaderMapping content without adding to Access DB"""
         if not self.excel_file:
             return None
