@@ -12,6 +12,7 @@ import time
 import subprocess
 import platform
 import glob
+import configparser
 
 class HeaderSelector:
     def __init__(self, root):
@@ -791,34 +792,61 @@ class HeaderSelector:
         return os.path.join(excel_dir, mapping_filename)
 
     def save_mapping_to_file(self):
-        """Save current mappings to JSON file"""
+        """Save current mappings to INI file"""
         try:
             # Save current sheet mapping first
             if self.selected_sheet:
                 self.save_current_sheet_mapping()
             
             mapping_file = self.generate_mapping_file_path()
+
+            # Create ConfigParser object
+            config = configparser.ConfigParser(interpolation=None)
             
-            # Prepare data to save
-            save_data = {
-                "excel_file": os.path.basename(self.excel_file),
-                "created_date": datetime.now().isoformat(),
-                "total_sheets": len(self.all_sheets_data),
-                "configured_sheets": len(self.sheet_mappings),
-                "sheet_mappings": self.sheet_mappings,
-                "sheet_selected_headers": self.sheet_selected_headers,
-                "all_sheets_data": self.all_sheets_data
+            # General information section
+            config['GENERAL'] = {
+                'excel_file': os.path.basename(self.excel_file),
+                'created_date': datetime.now().strftime("%Y-%m-%d"), 
+                'total_sheets': str(len(self.all_sheets_data)),
+                'configured_sheets': str(len(self.sheet_mappings))
             }
                         
             # Save to file
+            for sheet_name, mappings in self.sheet_mappings.items():
+                section_name = f"MAPPING_{sheet_name}"
+                config[section_name] = {}
+                
+                for standard_header, mapped_excel in mappings.items():
+                    # Convert None values to empty strings for INI
+                    value = mapped_excel if mapped_excel is not None else ""
+                    config[section_name][standard_header] = value
+
+            # Save selected headers
+            for sheet_name, headers in self.sheet_selected_headers.items():
+                section_name = f"SELECTED_{sheet_name}"
+                config[section_name] = {}
+                
+                # Save headers as numbered keys
+                for i, header in enumerate(headers, 1):
+                    config[section_name][str(i)] = header
+
+            # Save all sheets data
+            for sheet_name, headers in self.all_sheets_data.items():
+                section_name = f"SHEETDATA_{sheet_name}"
+                config[section_name] = {}
+                
+                for i, header in enumerate(headers, 1):
+                    config[section_name][str(i)] = header
+                 
+            # Write to INI file
             with open(mapping_file, 'w', encoding='utf-8') as f:
-                json.dump(save_data, f, indent=2, ensure_ascii=False)
+                config.write(f)
             
             self.mapping_file_path = mapping_file
             self.update_mapping_status(f"💾 Saved: {os.path.basename(mapping_file)}", "green")
 
             return True, mapping_file
-            
+
         except Exception as e:
             error_msg = f"Error saving mapping: {str(e)}"
             print(f"❌ {error_msg}")
@@ -826,7 +854,7 @@ class HeaderSelector:
             return False, error_msg
 
     def load_mapping_from_file(self, mapping_file=None):
-        """Load mappings from JSON file"""
+        """Load mappings from INI file"""
         try:
             if not mapping_file:
                 mapping_file = self.generate_mapping_file_path()
@@ -835,34 +863,60 @@ class HeaderSelector:
                 return False, "Mapping file not found"
             
             # Load data from file
-            with open(mapping_file, 'r', encoding='utf-8') as f:
-                load_data = json.load(f)
+            config = configparser.ConfigParser(interpolation=None)
+            config.read(mapping_file, encoding='utf-8')
             
             # Validate data
-            if "sheet_mappings" not in load_data:
-                return False, "Invalid mapping file format"
+            if 'GENERAL' not in config:
+                return False, "Invalid mapping file format - missing GENERAL section"
             
             # Check if Excel file matches
-            loaded_excel  = load_data.get("excel_file", "")
+            loaded_excel = config['GENERAL'].get('excel_file', '')
             current_excel = os.path.basename(self.excel_file)
             
-            if loaded_excel != current_excel:
-                pass
+            # Load sheet mappings
+            self.sheet_mappings = {}
+            for section_name in config.sections():
+                if section_name.startswith('MAPPING_'):
+                    sheet_name = section_name[8:]  # Remove 'MAPPING_' prefix
+                    mappings = {}
+                    
+                    for key, value in config[section_name].items():
+                        mapped_value = value if value.strip() != "" else None
+                        mappings[key] = mapped_value
+                    
+                    self.sheet_mappings[sheet_name] = mappings
             
-            # Load mappings
-            self.sheet_mappings         = load_data.get("sheet_mappings", {})
-            self.sheet_selected_headers = load_data.get("sheet_selected_headers", {})
+            # Load selected headers
+            self.sheet_selected_headers = {}
+            for section_name in config.sections():
+                if section_name.startswith('SELECTED_'):
+                    sheet_name = section_name[9:]  # Remove 'SELECTED_' prefix
+                    headers = []
 
-            self.mapping_file_path      = mapping_file
-            self.mapping_loaded         = True
+                    numeric_keys = []
+                    for key in config[section_name].keys():
+                        if key.isdigit():
+                            numeric_keys.append(int(key))
+                    
+                    if numeric_keys:
+                        for i in sorted(numeric_keys):
+                            key_str = str(i)
+                            if key_str in config[section_name]:
+                                headers.append(config[section_name][key_str])
+
+                    self.sheet_selected_headers[sheet_name] = headers
+
+            self.mapping_file_path = mapping_file
+            self.mapping_loaded = True
             
-            loaded_sheets               = len(self.sheet_mappings)
-            created_date                = load_data.get("created_date", "Unknown")
+            loaded_sheets = len(self.sheet_mappings)
+            created_date = config['GENERAL'].get('created_date', 'Unknown')
             
             self.update_mapping_status(f"📂 Loaded: {loaded_sheets} sheets", "blue")
             
             return True, f"Loaded mappings for {loaded_sheets} sheets (Created: {created_date[:10]})"
-            
+
         except Exception as e:
             error_msg = f"Error loading mapping: {str(e)}"
             print(f"❌ {error_msg}")
@@ -914,15 +968,15 @@ class HeaderSelector:
         ttk.Label(self.progress_frame, text="Progress:", font=("Arial", 9)).pack(side="left", padx=(10, 5))
         
         self.progress_var = tk.DoubleVar()
-        self.progress_bar = ttk.Progressbar(self.progress_frame, variable=self.progress_var, maximum=100, length=200, mode='determinate')
+        self.progress_bar = ttk.Progressbar(self.progress_frame, variable=self.progress_var, maximum=100, length=250, mode='determinate')
         self.progress_bar.pack(side="left", padx=(0, 5))
         
-        self.progress_percent_label = ttk.Label(self.progress_frame, text="0%", width=5, font=("Arial", 9, "bold"))
+        self.progress_percent_label = ttk.Label(self.progress_frame, text="0%", width=5, font=("Arial", 7, "bold"))
         self.progress_percent_label.pack(side="left", padx=(0, 10))
         
         # Progress status label (same line as progress bar)
         self.progress_label = ttk.Label(self.progress_frame, text="⏳ Initializing conversion...", font=("Arial", 6), foreground="blue")
-        self.progress_label.pack(side="left")
+        self.progress_label.pack(side="left", padx=(0, 10))
 
     def check_and_auto_load_recent_file(self):
         """Check for recently used Excel file and auto-load if found"""
@@ -1671,7 +1725,7 @@ The saved configurations have been automatically applied.
 
     def show_progress_section(self):
         """Show the embedded progress section centered between left and right buttons"""
-        self.progress_frame.pack(side="left", expand=True, padx=(10, 10))
+        self.progress_frame.pack(side="left", expand=True, fill="x", padx=(20, 20))
         
         # Initialize progress
         self.progress_var.set(0)
@@ -1687,7 +1741,7 @@ The saved configurations have been automatically applied.
         """Update progress bar and message"""
         if not self.conversion_cancelled:
             self.progress_var.set(percent)
-            self.progress_percent_label.config(text=f"{percent:.1f}%")
+            self.progress_percent_label.config(text=f"{percent:.0f}%")
             self.progress_label.config(text=message)
             self.root.update_idletasks()
 
