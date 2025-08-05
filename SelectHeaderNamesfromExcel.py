@@ -11,6 +11,7 @@ import threading
 import time
 import subprocess
 import platform
+import glob
 
 class HeaderSelector:
     def __init__(self, root):
@@ -93,88 +94,92 @@ class HeaderSelector:
 
     def show_conversion_complete_dialog(self, access_file, configured_count, unconfigured_count):
         """Show completion dialog with option to open database location"""
-        
+    
         # Create custom dialog
         dialog = tk.Toplevel(self.root)
         dialog.title("🎉 Conversion Complete")
-        dialog.geometry("400x360")
-        dialog.resizable(True, True)
-        dialog.minsize(400, 360)
+        dialog.geometry("400x400")
+        dialog.resizable(False, False)
         dialog.withdraw()
 
         # Center the dialog
         dialog.transient(self.root)
-        # dialog.grab_set()
-        
-        # Main frame with smaller padding
-        main_frame = ttk.Frame(dialog, padding="5")
-        main_frame.pack(fill="both", expand=True)
-        
-        # Success icon and title
-        title_frame = ttk.Frame(main_frame)
-        title_frame.pack(fill="x", pady=(0, 5))
-        
+    
+        # Main container with absolute positioning
+        container = tk.Frame(dialog)
+        container.pack(fill="both", expand=True)
+        container.pack_propagate(False)
+    
+        # Title section
+        title_frame = tk.Frame(container, height=50)
+        title_frame.pack(fill="x", padx=10, pady=(10, 5))
+        title_frame.pack_propagate(False)
+    
         style = ttk.Style()
         style.configure("Small.TLabelframe.Label", font=("Arial", 7))
 
         success_label = ttk.Label(title_frame, text="🎉", font=("Arial", 11))
-        success_label.pack()
-        
+        success_label.pack(pady=(5, 0))
+    
         title_label = ttk.Label(title_frame, text="Conversion Completed Successfully!", font=("Arial", 7, "bold"), foreground="green")
-        title_label.pack(pady=(3, 0))
+        title_label.pack()
 
-        # Information frame with smaller padding
-        info_frame = ttk.LabelFrame(main_frame, text="📊 Conversion Summary", padding="6", style="Small.TLabelframe")
-        info_frame.pack(fill="x", pady=(0, 10))
-        
-        # Configure grid weights for better spacing
+        # Information section
+        info_frame = ttk.LabelFrame(container, text="📊 Conversion Summary", padding="6", style="Small.TLabelframe")
+        info_frame.pack(fill="x", padx=10, pady=5)
+        info_frame.pack_propagate(False)
+        info_frame.configure(height=150)
+    
+        # Configure grid
         info_frame.grid_columnconfigure(1, weight=1)
-        
-        ttk.Label(info_frame, text="📂  Source File:", font=("Arial", 7, "bold")).grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=2)
+    
+        # Labels with consistent positioning
+        ttk.Label(info_frame, text="📂  Source File:", font=("Arial", 7, "bold")).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=2)
         source_label = ttk.Label(info_frame, text=os.path.basename(self.excel_file), font=("Arial", 7), wraplength=250)
         source_label.grid(row=0, column=1, sticky="w", pady=2)
 
         ttk.Label(info_frame, text="📋   Database File:", font=("Arial", 7, "bold")).grid(row=1, column=0, sticky="w", padx=(0, 8), pady=2)
         db_label = ttk.Label(info_frame, text=os.path.basename(access_file), font=("Arial", 7), wraplength=250)
         db_label.grid(row=1, column=1, sticky="w", pady=2)
-        
+    
         ttk.Label(info_frame, text="📊   Total Sheets:", font=("Arial", 7, "bold")).grid(row=2, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(info_frame, text=str(len(self.all_sheets_data)), font=("Arial", 7)).grid(row=2, column=1, sticky="w", pady=2)
-        
+    
         ttk.Label(info_frame, text="✅   Custom Mappings:", font=("Arial", 7, "bold")).grid(row=3, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(info_frame, text=f"{configured_count} sheets", font=("Arial", 7)).grid(row=3, column=1, sticky="w", pady=2)
-        
+    
         ttk.Label(info_frame, text="📋   Original Headers:", font=("Arial", 7, "bold")).grid(row=4, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(info_frame, text=f"{unconfigured_count} sheets", font=("Arial", 7)).grid(row=4, column=1, sticky="w", pady=2)
-       
+   
         ttk.Label(info_frame, text="📄   HeaderMapping:", font=("Arial", 7, "bold")).grid(row=5, column=0, sticky="w", padx=(0, 8), pady=2)
-        
-        has_mapping = len(self.sheet_mappings) > 0 or len(self.all_sheets_data) > 0
-        
+    
+        has_mapping = len(self.sheet_mappings) > 0 or len(self.all_sheets_data) > 0    
         if has_mapping:
             ttk.Label(info_frame, text="Added to Access DB", font=("Arial", 7)).grid(row=5, column=1, sticky="w", pady=2)
         else:
             ttk.Label(info_frame, text="Not created", font=("Arial", 7)).grid(row=5, column=1, sticky="w", pady=2)
 
-        # File path frame with smaller padding
-        path_frame = ttk.LabelFrame(main_frame, text="📂 Database Location", padding="6", style="Small.TLabelframe")
-        path_frame.pack(fill="x", pady=(0, 10))
+        # Database Location section
+        path_frame = ttk.LabelFrame(container, text="📂 Database Location", padding="6", style="Small.TLabelframe")
+        path_frame.pack(fill="x", padx=10, pady=5)
+        path_frame.pack_propagate(False)
+        path_frame.configure(height=70)
 
-        # Show full path with smaller text widget
         path_text = tk.Text(path_frame, height=2, wrap=tk.WORD, font=("Consolas", 7), relief="sunken", borderwidth=1, background="#f8f9fa")
         path_text.pack(fill="x", pady=(2, 0))
         path_text.insert("1.0", access_file)
-        path_text.config(state="disabled")  # Make read-only
-       
-        # Button frame with smaller padding
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill="x", pady=(8, 0))
-        
+        path_text.config(state="disabled")
+   
+        # Button section
+        button_frame = tk.Frame(container, height=50)
+        button_frame.pack(fill="x", side="bottom", padx=10, pady=(5, 10))
+        button_frame.pack_propagate(False)
+
         # Variables to track user choice
         dialog_closed   = threading.Event()
         user_action     = [None]    # Use list to make it mutable in nested function
         action_taken    = [False]   # Prevent multiple actions
-        
+    
         def on_open_location():
             if action_taken[0]:  # Prevent multiple clicks
                 return
@@ -182,7 +187,7 @@ class HeaderSelector:
             user_action[0]  = 'open_location'
             dialog_closed.set()
             dialog.destroy()
-        
+    
         def on_close():
             if action_taken[0]:  # Prevent multiple clicks  
                 return
@@ -190,18 +195,17 @@ class HeaderSelector:
             user_action[0]  = 'close'
             dialog_closed.set()
             dialog.destroy()
-        
-        # Create buttons with smaller sizes
+    
         style.configure("Small.TButton", font=("Arial", 7))
 
         open_btn = ttk.Button(button_frame, text="📂 Open Location", command=on_open_location, width=18, style="Small.TButton")
         open_btn.pack(side="left", padx=(0, 8))
-        
+    
         close_btn = ttk.Button(button_frame, text="❌ Close", command=on_close, width=12, style="Small.TButton")
         close_btn.pack(side="right")
-        
+    
         open_btn.focus_set()        # Set focus to Open button
-        
+    
         # Add keyboard shortcuts with action protection
         def on_key_press(event):
             if action_taken[0]:     # Prevent multiple keyboard actions
@@ -210,42 +214,40 @@ class HeaderSelector:
                 on_open_location()
             elif event.keysym == 'Escape':
                 on_close()
-        
+    
         dialog.bind('<Key>', on_key_press)
         dialog.focus_set()
-        
+    
         # Handle window close event with action protection
         def on_window_close():
             if not action_taken[0]:
                 on_close()
-        
+    
         dialog.protocol("WM_DELETE_WINDOW", on_window_close)
-        
-        # Center dialog on screen
-        dialog.update_idletasks()
+    
+        # Center dialog on screen with ABSOLUTE positioning
         screen_width  = dialog.winfo_screenwidth()
         screen_height = dialog.winfo_screenheight()
-        x = (screen_width // 2) - (dialog.winfo_width() // 2)
-        y = (screen_height // 2) - (dialog.winfo_height() // 2)
-        dialog.geometry(f"+{x}+{y}")
-        
+        x = (screen_width // 2) - (400 // 2)
+        y = (screen_height // 2) - (400 // 2)
+        dialog.geometry(f"400x400+{x}+{y}")
+    
         dialog.deiconify()
         dialog.grab_set()
 
         dialog.wait_window()        # Wait for user choice
-        
-        # Handle user action - always use the enhanced open location method
+    
+        # Handle user action
         if user_action[0] == 'open_location':
             print("🎯 User chose to open database location")
             success = self.open_database_location(access_file)
-            
+        
             if success:
                 print("✅ Database location opened successfully")
             else:
                 print("❌ Failed to open database location")
         else:
             print("ℹ️ User chose to close dialog without opening location")
-        # For 'close' or None, do nothing
 
     def extract_headers(self, df):
         """Extract headers from DataFrame"""
@@ -356,8 +358,13 @@ class HeaderSelector:
         self.file_label = ttk.Label(inner_frame, text="No file selected", foreground="gray", font=("Arial", 8))
         self.file_label.pack(side="left", padx=(10, 0))
         
-        ttk.Button(inner_frame, text="🔍 Browse", command=self.browse_file).pack(side="right")
-        
+        # Buttons container for Browse and Helper
+        buttons_frame = ttk.Frame(inner_frame)
+        buttons_frame.pack(side="right")
+    
+        ttk.Button(buttons_frame, text="🔍 Browse", command=self.browse_file).pack(side="left")
+        ttk.Button(buttons_frame, text="❓", command=self.show_helper, width=3).pack(side="left")
+
         # Sheet selection row
         sheet_row = ttk.Frame(file_frame)
         sheet_row.pack(fill="x", padx=10, pady=(0, 3))
@@ -1260,6 +1267,82 @@ You can switch between sheets to see the saved configurations.
             filename = os.path.basename(file_path)
             self.file_label.config(text=f"📁 {filename}", foreground="black")
             self.load_excel_data()
+
+    def show_helper(self):
+        """Show Helper dialog with Word Software Manual"""
+        try:
+            manual_files = self.find_manual_files()     # Look for Word manual files in current directory
+        
+            if not manual_files:                        # If no manual file found, show error message
+                messagebox.showwarning(
+                    "📄 Manual Not Found", 
+                    "Software Manual not found!\n\n"
+                    "Please ensure 'SOFTWARE MANUAL for Selected header.docx'\n"
+                    "is placed in the same directory as this Python script"
+                )
+            else:                                       # If found, show selection or open directly
+                self.open_word_manual(manual_files[0])  # Open the first (or only) manual file found
+                
+        except Exception as e:
+            print(f"❌ Error opening helper: {str(e)}")
+            messagebox.showerror("❌ Error", f"Cannot open Software Manual:\n{str(e)}")
+
+    def find_manual_files(self):
+        """Find Word manual files in current directory"""
+        manual_files = []
+        current_dir  = os.getcwd()
+    
+        # Common manual file patterns
+        manual_patterns = [
+            "*manual*.docx", "*manual*.doc",
+            "*Manual*.docx", "*Manual*.doc", 
+        ]
+    
+        for pattern in manual_patterns:
+            found_files = glob.glob(os.path.join(current_dir, pattern))
+            manual_files.extend(found_files)
+    
+        # Remove duplicates and sort
+        manual_files = list(set(manual_files))
+        manual_files.sort()
+    
+        print(f"🔍 Found {len(manual_files)} manual files:")
+        for file in manual_files:
+            print(f"  📄 {os.path.basename(file)}")
+    
+        return manual_files
+
+    def open_word_manual(self, manual_path):
+        """Open Word manual file"""
+        try:
+            if not os.path.exists(manual_path):
+                messagebox.showerror("❌ Error", f"Manual file not found:\n{manual_path}")
+                return
+
+            # Try to open with system default application
+            if platform.system() == "Windows":
+                os.startfile(manual_path)
+        
+            # Update result text
+            self.result_text.delete(1.0, tk.END)
+            self.result_text.insert(tk.END, f"""
+    📖 Software Manual Opened Successfully!
+
+    📄 Manual File: {os.path.basename(manual_path)}
+    📂 File Location: {os.path.dirname(manual_path)}
+    📊 File Size: {os.path.getsize(manual_path) / 1024:.1f} KB
+    📅 Opened: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+    💡 The Software Manual has been opened in your default Word application.
+    Please refer to the manual for detailed instructions on using this tool.
+
+    🔧 If you need quick help while using the tool, you can always click the Helper button again.
+    """)
+        
+        except Exception as e:
+            error_msg = f"Cannot open manual file:\n{str(e)}"
+            print(f"❌ {error_msg}")
+            messagebox.showerror("❌ Error", error_msg)
 
     def load_excel_data(self):
         """Load data from Excel file - Added auto-load mapping"""
