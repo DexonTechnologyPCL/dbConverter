@@ -15,6 +15,12 @@ import glob
 import configparser
 
 class HeaderSelector:
+    # Feature type configuration - integrated directly into the class
+    FEATURE_TYPE_CONFIG = {
+        'height_features': ['CRAL'],
+        'depth_features': ['COCL', 'CORR', 'LAMI', 'MAIN'],
+    }
+    
     def __init__(self, root):
         self.root = root
         self.root.title("Header Names Selector")
@@ -31,12 +37,9 @@ class HeaderSelector:
         
         self.sheet_mappings = {}                               # Store mapping of all sheets
         self.sheet_selected_headers = {}                       # Store selected headers of all sheets
-        
-        # Unit system variables
-        self.use_imperial_units = tk.BooleanVar(value=False)   # Default to SI units
-        
-        # Initialize standard headers after unit system variable is created
-        self.standard_headers = self.Set_standard_headers()     # 26 standard columns
+       
+        self.use_imperial_units = tk.BooleanVar(value=False)   # Unit system variables (Default to SI units)
+        self.standard_headers = self.Set_standard_headers()    # Initialize standard headers after unit system variable is created
         
         # Mapping file variables
         self.mapping_file_path = ""                            # Path to mapping file
@@ -58,7 +61,6 @@ class HeaderSelector:
             from ExcelToAccessDB import excel_to_access
             self.excel_to_access = excel_to_access
             self.conversion_available = True
-            print("✅ Excel to Access conversion: Available")
         except ImportError:
             self.conversion_available = False
             print("⚠️ Excel to Access conversion: Not available")
@@ -104,7 +106,7 @@ class HeaderSelector:
         # Create custom dialog
         dialog = tk.Toplevel(self.root)
         dialog.title("🎉 Conversion Complete")
-        dialog.geometry("400x400")
+        dialog.geometry("420x420")
         dialog.resizable(False, False)
         dialog.withdraw()
 
@@ -140,7 +142,7 @@ class HeaderSelector:
         info_frame.grid_columnconfigure(1, weight=1)
     
         # Labels with consistent positioning
-        ttk.Label(info_frame, text="📂  Source File:", font=("Arial", 7, "bold")).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(info_frame, text="📂   Source File:", font=("Arial", 7, "bold")).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=2)
         source_label = ttk.Label(info_frame, text=os.path.basename(self.excel_file), font=("Arial", 7), wraplength=250)
         source_label.grid(row=0, column=1, sticky="w", pady=2)
 
@@ -157,8 +159,8 @@ class HeaderSelector:
         ttk.Label(info_frame, text="📋   Original Headers:", font=("Arial", 7, "bold")).grid(row=4, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(info_frame, text=f"{unconfigured_count} sheets", font=("Arial", 7)).grid(row=4, column=1, sticky="w", pady=2)
    
-        ttk.Label(info_frame, text="📏   Unit System:", font=("Arial", 7, "bold")).grid(row=5, column=0, sticky="w", padx=(0, 8), pady=2)
-        unit_system = "Imperial (ft, in, psi)" if self.use_imperial_units.get() else "SI (m, mm, bar)"
+        ttk.Label(info_frame, text="📏    Unit System:", font=("Arial", 7, "bold")).grid(row=5, column=0, sticky="w", padx=(0, 8), pady=2)
+        unit_system = "Imperial" if self.use_imperial_units.get() else "SI"
         ttk.Label(info_frame, text=unit_system, font=("Arial", 7)).grid(row=5, column=1, sticky="w", pady=2)
         
         ttk.Label(info_frame, text="📄   HeaderMapping:", font=("Arial", 7, "bold")).grid(row=6, column=0, sticky="w", padx=(0, 8), pady=2)
@@ -238,9 +240,9 @@ class HeaderSelector:
         # Center dialog on screen with ABSOLUTE positioning
         screen_width  = dialog.winfo_screenwidth()
         screen_height = dialog.winfo_screenheight()
-        x = (screen_width // 2) - (400 // 2)
-        y = (screen_height // 2) - (400 // 2)
-        dialog.geometry(f"400x400+{x}+{y}")
+        x = (screen_width // 2) - (420 // 2)
+        y = (screen_height // 2) - (420 // 2)
+        dialog.geometry(f"420x420+{x}+{y}")
     
         dialog.deiconify()
         dialog.grab_set()
@@ -249,7 +251,6 @@ class HeaderSelector:
     
         # Handle user action
         if user_action[0] == 'open_location':
-            print("🎯 User chose to open database location")
             success = self.open_database_location(access_file)
         
             if success:
@@ -336,7 +337,7 @@ class HeaderSelector:
                 "Altitude (m)",
                 "Feature type",
                 "Feature identification",
-                "Anomaly identification",
+                "Anomaly identification", 
                 "Girth weld Nr",
                 "Joint manufacturing type",
                 "Joint / component length (m)",
@@ -363,7 +364,7 @@ class HeaderSelector:
         if "List of Nominal Wall Thickness" in sheet_name:
             if use_imperial:
                 return [
-                    "Log distance (ft)",  # Will handle [mi], [m], [ft] inputs
+                    "Log distance (ft)",
                     "Girth weld Nr",
                     "Nominal thickness (in)",
                     "Joint manufacturing type",
@@ -381,19 +382,8 @@ class HeaderSelector:
                     "Design Pressure (psi)",
                     "MAOP (psi)"
                 ]
-        elif "List of Repair" in sheet_name:
-            if use_imperial:
-                # Use Imperial headers but change Altitude to (m)
-                imperial_headers = self.Set_standard_headers()
-                repair_headers = []
-                for header in imperial_headers:
-                    if "Altitude" in header:
-                        repair_headers.append("Altitude (m)")  # Always in meters for List of Repair
-                    else:
-                        repair_headers.append(header)
-                return repair_headers
         else:
-            # Default: return all standard headers (now includes both Max. depth and Max. Height)
+            # Default: return all standard headers
             return self.Set_standard_headers()
 
     def setup_ui(self):
@@ -656,7 +646,7 @@ class HeaderSelector:
             if group_key not in header_order:
                 header_order[group_key] = i
             
-            print(f"  {i+1:2d}. {header} -> group: {group_key}")
+            print(f"  {i+1:2d}. {header} -> :{group_key}")
         
         # Convert to ordered dict, maintaining Excel appearance order
         result = {}
@@ -739,66 +729,92 @@ class HeaderSelector:
         self.standard_tree.tag_configure("hardcoded", foreground="blue")
 
     def get_current_standard_headers(self):
-        """Get standard headers for current selected sheet"""
+        """Get current standard headers based on sheet type"""
         if self.selected_sheet:
-            base_headers = self.get_sheet_specific_headers(self.selected_sheet)
+            base_headers     = self.get_sheet_specific_headers(self.selected_sheet)
+            adjusted_headers = self.adjust_log_distance_header(base_headers)         # Check Log distance unit in Excel headers and adjust Standard Headers
+            filtered_headers = self.filter_headers_by_feature_type(adjusted_headers) # Filter headers based on feature type analysis
             
-            # Skip filtering for List of Nominal Wall Thickness (no Max columns)
-            if "List of Nominal Wall Thickness" in self.selected_sheet:
-                return base_headers
+            return filtered_headers
+        else:
+            return self.Set_standard_headers()
+
+    def filter_headers_by_feature_type(self, headers, sheet_name=None):
+        """Filter headers based on feature type analysis"""
+        if not sheet_name:
+            sheet_name = self.selected_sheet
             
-            # Check for Log distance unit in Excel headers and adjust Standard Headers
-            adjusted_headers = self.adjust_log_distance_header(base_headers)
-            
-            # Analyze Feature types to determine which Max columns to show
-            feature_analysis = self.analyze_feature_types_in_sheet(self.selected_sheet)
+        if "List of Nominal Wall Thickness" in sheet_name:
+            return headers
+
+        use_imperial = self.use_imperial_units.get()        # Check unit system first
+        
+        if not use_imperial:
+            # SI Units: Always show Max. depth columns
+            filtered_headers = []
+            max_headers_found = []
+       
+            for header in headers:
+                if not any(max_pattern in header.lower() for max_pattern in ['max. height', 'max. depth']):
+                    filtered_headers.append(header)
+                else:
+                    if 'max. depth' in header.lower():
+                        filtered_headers.append(header)
+   
+            return filtered_headers
+        
+        else:
+            # Imperial Units: Use feature type analysis to determine which Max columns to show
+            if "List of Pipe Tally" in sheet_name:
+                feature_analysis = self.analyze_feature_types_in_sheet(sheet_name)  # Analyze Feature types in Pipe Tally sheet
+                if feature_analysis:
+                    self.pipe_tally_feature_analysis = feature_analysis             # Store the analysis result for use in other sheets
+            else:
+                # Use stored analysis from Pipe Tally if available
+                if hasattr(self, 'pipe_tally_feature_analysis') and self.pipe_tally_feature_analysis:
+                    feature_analysis = self.pipe_tally_feature_analysis
+                else:
+                    # Fallback: analyze current sheet if no Pipe Tally analysis available
+                    feature_analysis = self.analyze_feature_types_in_sheet(sheet_name)
             
             if feature_analysis:
-                # Filter Max columns based on detected feature types
+                # Filter Max columns based on detected feature Identification
                 filtered_headers = []
                 max_headers_found = []
                 
-                for header in adjusted_headers:
+                for header in headers:
                     # Always include non-Max columns
                     if not any(max_pattern in header.lower() for max_pattern in ['max. height', 'max. depth']):
                         filtered_headers.append(header)
                     else:
-                        max_headers_found.append(header)
-                        # Filter Max columns based on feature types
+                        # max_headers_found.append(header)
                         if 'max. height' in header.lower():
                             if feature_analysis['show_max_height']:
                                 filtered_headers.append(header)
-                                print(f"   ✅ Including: {header}")
-                            else:
-                                print(f"   ❌ Excluding: {header} (no CRACK/CRAL detected)")
                         elif 'max. depth' in header.lower():
                             if feature_analysis['show_max_depth']:
                                 filtered_headers.append(header)
-                                print(f"   ✅ Including: {header}")
-                            else:
-                                print(f"   ❌ Excluding: {header} (no COCL/CORR/LAMI detected)")
-                
-                print(f"🎯 Filtered headers for '{self.selected_sheet}': {len(filtered_headers)} columns")
-                print(f"   📊 Found Max headers: {max_headers_found}")
-                if feature_analysis['show_max_height']:
-                    print(f"   ✅ Showing Max. Height columns (CRACK/CRAL detected)")
-                if feature_analysis['show_max_depth']:
-                    print(f"   ✅ Showing Max. depth columns (COCL/CORR/LAMI detected)")
-                
+
                 # Force show only one type if both are detected
                 if feature_analysis['show_max_height'] and feature_analysis['show_max_depth']:
-                    print(f"   ⚠️ Both types detected, forcing Height only")
                     # Remove Max. depth columns from filtered_headers
                     filtered_headers = [h for h in filtered_headers if 'max. depth' not in h.lower()]
-                    print(f"   🎯 Final filtered headers: {len(filtered_headers)} columns")
                 
                 return filtered_headers
             else:
-                # If analysis fails, return adjusted headers (fallback)
-                print(f"⚠️ Using adjusted headers for '{self.selected_sheet}' (analysis failed)")
-                return adjusted_headers
-        else:
-            return self.Set_standard_headers()
+                # Fallback: If feature analysis fails, show Max. Height columns by default
+                filtered_headers = []
+                # max_headers_found = []
+
+                for header in headers:
+                    if not any(max_pattern in header.lower() for max_pattern in ['max. height', 'max. depth']):
+                        filtered_headers.append(header)
+                    else:
+                        # In fallback mode, show Max. Height columns if they exist
+                        if 'max. height' in header.lower():
+                            filtered_headers.append(header)
+
+                return filtered_headers
 
     def update_standard_tree(self):
         """Update standard tree according to current mapping"""
@@ -807,20 +823,19 @@ class HeaderSelector:
             self.standard_tree.delete(item)
         
         # Get current headers and available excel headers
-        current_headers = self.get_current_standard_headers()
+        current_headers         = self.get_current_standard_headers()
         available_excel_headers = self.get_selected_excel_headers()
         
         # Update info label
-        sheet_type = "List of Nominal Wall Thickness" if "List of Nominal Wall Thickness" in self.selected_sheet else "Standard"
+        sheet_type   = "List of Nominal Wall Thickness" if "List of Nominal Wall Thickness" in self.selected_sheet else "Standard"
         header_count = len(current_headers)
-        unit_system = "Imperial" if self.use_imperial_units.get() else "SI"
+        unit_system  = "Imperial" if self.use_imperial_units.get() else "SI"
         
         # Get feature type analysis for additional info
         feature_info = ""
         if self.selected_sheet and "List of Nominal Wall Thickness" not in self.selected_sheet:
             feature_analysis = self.analyze_feature_types_in_sheet(self.selected_sheet)
             if feature_analysis:
-                feature_types = feature_analysis['feature_types']
                 if feature_analysis['show_max_height'] and feature_analysis['show_max_depth']:
                     feature_info = f" | Max columns: Height & Depth"
                 elif feature_analysis['show_max_height']:
@@ -955,7 +970,7 @@ class HeaderSelector:
         
         excel_dir  = os.path.dirname(self.excel_file)
         excel_name = os.path.splitext(os.path.basename(self.excel_file))[0]
-        mapping_filename = f"MappingHeader_{excel_name}.~p~"
+        mapping_filename = f"{excel_name}.~p~"
         return os.path.join(excel_dir, mapping_filename)
 
     def save_mapping_to_file(self):
@@ -970,14 +985,31 @@ class HeaderSelector:
             # Create ConfigParser object
             config = configparser.ConfigParser(interpolation=None)
             
+            # Analyze Feature types to determine which type is present
+            feature_mapping_type = "NONE"
+            if self.all_sheets_data:
+                # Analyze the first sheet or a specific sheet to determine feature type
+                first_sheet = list(self.all_sheets_data.keys())[0]
+                feature_analysis = self.analyze_feature_types_in_sheet(first_sheet)
+                
+                if feature_analysis:
+                    if feature_analysis['show_max_height']:
+                        feature_mapping_type = "CRACK"
+                    elif feature_analysis['show_max_depth']:
+                        feature_mapping_type = "CORROSION"
+                    else:
+                        feature_mapping_type = "NONE"
+            
             # General information section
             config['GENERAL'] = {
                 'excel_file': os.path.basename(self.excel_file),
                 'created_date': datetime.now().strftime("%Y-%m-%d"), 
                 'total_sheets': str(len(self.all_sheets_data)),
-                'configured_sheets': str(len(self.sheet_mappings))
+                'configured_sheets': str(len(self.sheet_mappings)),
+                'Unit System': "Imperial" if self.use_imperial_units.get() else "SI",
+                'Feature Iden Mapping': feature_mapping_type
             }
-                        
+       
             # Save to file
             for sheet_name, mappings in self.sheet_mappings.items():
                 section_name = f"MAPPING_{sheet_name}"
@@ -1040,6 +1072,16 @@ class HeaderSelector:
             # Check if Excel file matches
             loaded_excel = config['GENERAL'].get('excel_file', '')
             current_excel = os.path.basename(self.excel_file)
+
+            # Load Unit System from saved configuration
+            saved_unit_system = config['GENERAL'].get('Unit System', 'SI')
+            if saved_unit_system == 'Imperial':
+                self.use_imperial_units.set(True)
+                self.unit_status_label.config(text="📏 Imperial Units selected", foreground="green")
+            else:
+                self.use_imperial_units.set(False)
+                self.unit_status_label.config(text="📏 SI Units selected", foreground="blue")
+            print(f"📏 Loaded Unit System: {saved_unit_system}")
             
             # Load sheet mappings
             self.sheet_mappings = {}
@@ -1100,11 +1142,9 @@ class HeaderSelector:
         
         if use_imperial:
             self.unit_status_label.config(text="📏 Imperial Units selected", foreground="green")
-            print("🔄 Unit system changed to Imperial")
         else:
             self.unit_status_label.config(text="📏 SI Units selected", foreground="blue")
-            print("🔄 Unit system changed to SI")
-        
+
         # Update standard headers if sheet is selected
         if self.selected_sheet:
             self.update_standard_tree()
@@ -1117,7 +1157,6 @@ class HeaderSelector:
             if success:
                 loaded_sheets           = len(self.sheet_mappings)
                 selected_headers_count  = sum(len(headers) for headers in self.sheet_selected_headers.values())
-                print(f"✅ Loaded {loaded_sheets} sheet mappings with {selected_headers_count} header selections")
                 self.update_mapping_status(f"📂 Auto-loaded: {loaded_sheets} sheets", "blue")
                 return True
             else:
@@ -1172,25 +1211,18 @@ class HeaderSelector:
                     
                     # Generate mapping file name for this Excel
                     excel_name   = os.path.splitext(file)[0]
-                    mapping_name = f"MappingHeader_{excel_name}.~p~"
+                    mapping_name = f"{excel_name}.~p~"
                     mapping_path = os.path.join(current_dir, mapping_name)
                     
                     if os.path.exists(mapping_path):
                         mtime = os.path.getmtime(excel_path)
                         excel_files.append((excel_path, mapping_path, mtime))
-                        print(f"   ✅ Found mapping file!")
-                    else:
-                        print(f"   ❌ No mapping file")
             
             if excel_files:
                 # Sort by modification time (most recent first)
                 excel_files.sort(key=lambda x: x[2], reverse=True)
-                recent_excel, recent_mapping, _ = excel_files[0]
-                
-                print(f"🚀 Auto-loading: {os.path.basename(recent_excel)} with saved mapping")
+                recent_excel, recent_mapping, _ = excel_files[0]             
                 self.auto_load_specific_file(recent_excel, recent_mapping)
-            else:
-                print("💡 No Excel files with mappings found")
                 
         except Exception as e:
             print(f"❌ Error checking recent file: {str(e)}")
@@ -1202,12 +1234,11 @@ class HeaderSelector:
             self.excel_file = excel_path
             filename        = os.path.basename(excel_path)
             self.file_label.config(text=f"📁 {filename}", foreground="black")
-            
-            # Load mapping first
-            mapping_success = self.load_mapping_from_specific_file(mapping_path)
+
+            mapping_success = self.load_mapping_from_specific_file(mapping_path) # Load mapping first
             
             if mapping_success:
-                self.load_excel_with_existing_mapping()                # Load Excel data
+                self.load_excel_with_existing_mapping()                          # Load Excel data
             else:
                 self.load_excel_data_silently() 
                 
@@ -1227,8 +1258,6 @@ class HeaderSelector:
             loaded_sheets               = len(self.sheet_mappings)
             selected_headers_count      = sum(len(headers) for headers in self.sheet_selected_headers.values())
             
-            print(f"✅ Loaded {loaded_sheets} sheet mappings with {selected_headers_count} header selections")
-
             self.mapping_file_path      = mapping_path
             self.mapping_loaded         = True
             self.update_mapping_status(f"📂 Auto-loaded: {loaded_sheets} sheets", "blue")
@@ -1251,12 +1280,11 @@ class HeaderSelector:
             # Load all sheets
             for sheet_name in xls.sheet_names:
                 try:
-                    df = pd.read_excel(xls, sheet_name=sheet_name, header=None, nrows=3)
+                    df      = pd.read_excel(xls, sheet_name=sheet_name, header=None, nrows=3)
                     headers = self.extract_headers(df)
                     self.all_sheets_data[sheet_name] = headers
                     
                 except Exception as e:
-                    print(f"  ❌ Warning: Cannot read sheet '{sheet_name}': {str(e)}")
                     continue
             
             if not self.all_sheets_data:
@@ -1307,7 +1335,6 @@ class HeaderSelector:
             
         except Exception as e:
             print(f"❌ Error loading Excel with mapping: {str(e)}")
-            import traceback
             traceback.print_exc()
             return False
             
@@ -1344,10 +1371,7 @@ class HeaderSelector:
                         restored_count += 1
                     else:
                         widget_info['status'].config(text="Ready", foreground="blue")
-            
-            if restored_count > 0:
-                print(f"✅ Restored {restored_count} header mappings for '{self.selected_sheet}'")
-            
+
             # Force UI update
             self.root.update_idletasks()
             
@@ -1384,7 +1408,6 @@ class HeaderSelector:
                     self.all_sheets_data[sheet_name] = headers
                     
                 except Exception as e:
-                    print(f"  ❌ Warning: Cannot read sheet '{sheet_name}': {str(e)}")
                     continue
             
             if not self.all_sheets_data:
@@ -1558,11 +1581,7 @@ You can switch between sheets to see the saved configurations.
         # Remove duplicates and sort
         manual_files = list(set(manual_files))
         manual_files.sort()
-    
-        print(f"🔍 Found {len(manual_files)} manual files:")
-        for file in manual_files:
-            print(f"  📄 {os.path.basename(file)}")
-    
+
         return manual_files
 
     def open_word_manual(self, manual_path):
@@ -1620,10 +1639,8 @@ You can switch between sheets to see the saved configurations.
                     df = pd.read_excel(xls, sheet_name=sheet_name, header=None, nrows=3)
                     headers = self.extract_headers(df)
                     self.all_sheets_data[sheet_name] = headers
-                    print(f"  ✅ Sheet '{sheet_name}': {len(headers)} headers")
-                    
+
                 except Exception as e:
-                    print(f" ⚠️ Warning: Cannot read sheet '{sheet_name}': {str(e)}")
                     continue
             
             if not self.all_sheets_data:
@@ -1708,10 +1725,6 @@ The saved configurations have been automatically applied.
             # Analyze feature types for Max column filtering
             if "List of Nominal Wall Thickness" not in self.selected_sheet:
                 feature_analysis = self.analyze_feature_types_in_sheet(self.selected_sheet)
-                if feature_analysis:
-                    print(f"🔄 Sheet changed to '{self.selected_sheet}' - Feature analysis completed")
-                else:
-                    print(f"🔄 Sheet changed to '{self.selected_sheet}' - Feature analysis failed, showing all headers")
 
             self.create_excel_header_widgets()      # Create header widgets first
             self.load_saved_sheet_mapping()         # Then load saved mapping if any
@@ -1761,11 +1774,8 @@ The saved configurations have been automatically applied.
                 if widget_info['selected'] in saved_headers:
                     widget_info['status'].config(text="Restored", foreground="green")
                     restored_count += 1
-        
-        if restored_count > 0:
-            print(f"✅ Restored {restored_count} header mappings")
 
-        self.root.update_idletasks()    # Force update the UI
+        self.root.update_idletasks() # Force update the UI
         self.update_standard_tree()  # Update the standard tree to reflect restored mappings
 
     def auto_map_headers(self):
@@ -1911,7 +1921,6 @@ The saved configurations have been automatically applied.
         if self.sheet_mappings and any(self.sheet_selected_headers.values()):
             success, result = self.save_mapping_to_file()
             if success:
-                print(f"✅ Auto-saved mapping: {os.path.basename(result)}")
                 self.update_mapping_status(f"💾 Auto-saved: {os.path.basename(result)}", "green")
         
         # Count configured sheets
@@ -2186,70 +2195,69 @@ The saved configurations have been automatically applied.
     {'='*80}
 
     """
-        
             # Loop through each sheet
             for sheet_name in self.all_sheets_data.keys():
-                            content += f"\n📋 SHEET: {sheet_name}\n"
-            content += f"{'─'*60}\n"
-            sheet_type = "List of Nominal Wall Thickness" if "List of Nominal Wall Thickness" in sheet_name else "Standard"
-            unit_system = "Imperial Units" if self.use_imperial_units.get() else "SI Units"
-            content += f"Sheet Type: {sheet_type}\n"
-            content += f"Unit System: {unit_system}\n"
+                content += f"\n📋 SHEET: {sheet_name}\n"
+                content += f"{'─'*60}\n"
+                sheet_type = "List of Nominal Wall Thickness" if "List of Nominal Wall Thickness" in sheet_name else "Standard"
+                unit_system = "Imperial Units" if self.use_imperial_units.get() else "SI Units"
+                content += f"Sheet Type: {sheet_type}\n"
+                content += f"Unit System: {unit_system}\n"
            
-            standard_headers = self.get_sheet_specific_headers(sheet_name)
+                standard_headers = self.get_sheet_specific_headers(sheet_name)
             
-            if sheet_name in self.sheet_mappings:
-                mappings = self.sheet_mappings[sheet_name]
-                content += f"Standard Headers: {len(standard_headers)}\n"
-                content += f"Header Mappings:\n\n"
+                if sheet_name in self.sheet_mappings:
+                    mappings = self.sheet_mappings[sheet_name]
+                    content += f"Standard Headers: {len(standard_headers)}\n"
+                    content += f"Header Mappings:\n\n"
                 
-                mapped_count = 0
-                unmapped_count = 0
-                tempdata_count = 0
+                    mapped_count = 0
+                    unmapped_count = 0
+                    tempdata_count = 0
 
-                content += f"{'Standard Header':<50} >> {'Mapping Column'}\n"
-                content += f"{'-'*50} >> {'-'*50}\n"
+                    content += f"{'Standard Header':<50} >> {'Mapping Column'}\n"
+                    content += f"{'-'*50} >> {'-'*50}\n"
                 
-                for i, standard_header in enumerate(standard_headers, 1):
-                    mapped_to = mappings.get(standard_header)
-                    if mapped_to:
-                        content += f"{standard_header:<50} >> {mapped_to}\n"
-                        mapped_count += 1
-                    else:
-                        content += f"{standard_header:<50} >> [Empty - Will create empty column]\n"
-                        unmapped_count += 1
+                    for i, standard_header in enumerate(standard_headers, 1):
+                        mapped_to = mappings.get(standard_header)
+                        if mapped_to:
+                            content += f"{standard_header:<50} >> {mapped_to}\n"
+                            mapped_count += 1
+                        else:
+                            content += f"{standard_header:<50} >> [Empty - Will create empty column]\n"
+                            unmapped_count += 1
                     
-                # Find the remaining headers from Excel that are not used
-                used_headers = [v for v in mappings.values() if v is not None]
-                all_excel_headers = self.all_sheets_data[sheet_name]
-                remaining_headers = [h for h in all_excel_headers if h not in used_headers]
+                    # Find the remaining headers from Excel that are not used
+                    used_headers = [v for v in mappings.values() if v is not None]
+                    all_excel_headers = self.all_sheets_data[sheet_name]
+                    remaining_headers = [h for h in all_excel_headers if h not in used_headers]
                 
-                if remaining_headers:
-                    content += f"\n📁 REMAINING COLUMNS (will become TempData):\n"
-                    for i, orig_col in enumerate(remaining_headers, 1):
-                        content += f"TempData{i:<3d} << {orig_col}\n"
-                        tempdata_count += 1
+                    if remaining_headers:
+                        content += f"\n📁 REMAINING COLUMNS (will become TempData):\n"
+                        for i, orig_col in enumerate(remaining_headers, 1):
+                            content += f"TempData{i:<3d} << {orig_col}\n"
+                            tempdata_count += 1
+                    else:
+                        content += f"\n📋 No remaining columns - no TempData will be created\n"
+                
+                    # Show new columns for List of Pipe Tally
+                    if sheet_name == "List of Pipe Tally":
+                        content += f"\n🆕 NEW COLUMNS:\n"
+                        new_columns = ['Velocity (m/s)', 'ImgPath1', 'ImgPath2', 'Timestr']
+                        for new_col in new_columns:
+                            content += f"{new_col}\n"
+                            
+                    # Summary for this sheet
+                    content += f"\n📊 Summary: {mapped_count} Mapped, {unmapped_count} Unmapped, {tempdata_count} TempData\n"
+                            
                 else:
-                    content += f"\n📋 No remaining columns - no TempData will be created\n"
+                    # Sheet without mapping
+                    content += f"Status: ⚠️ Not Configured (Original Headers)\n"
+                    available_headers = self.all_sheets_data[sheet_name]
+                    content += f"Will use original Excel headers ({len(available_headers)} columns):\n\n"
                 
-                # Show new columns for List of Pipe Tally
-                if sheet_name == "List of Pipe Tally":
-                    content += f"\n🆕 NEW COLUMNS:\n"
-                    new_columns = ['Velocity (m/s)', 'ImgPath1', 'ImgPath2', 'Timestr']
-                    for new_col in new_columns:
-                        content += f"{new_col}\n"
-                            
-                # Summary for this sheet
-                content += f"\n📊 Summary: {mapped_count} Mapped, {unmapped_count} Unmapped, {tempdata_count} TempData\n"
-                            
-            else:
-                # Sheet without mapping
-                content += f"Status: ⚠️ Not Configured (Original Headers)\n"
-                available_headers = self.all_sheets_data[sheet_name]
-                content += f"Will use original Excel headers ({len(available_headers)} columns):\n\n"
-                
-                for i, header in enumerate(available_headers, 1):
-                    content += f"  {i:2d}. {header}\n"
+                    for i, header in enumerate(available_headers, 1):
+                        content += f"  {i:2d}. {header}\n"
         
             # Overall summary
             configured_count = len(self.sheet_mappings)
@@ -2297,60 +2305,91 @@ The saved configurations have been automatically applied.
         """Analyze Feature type column in the specified sheet to determine which Max columns to show"""
         try:
             if not sheet_name or sheet_name not in self.all_sheets_data:
-                print(f"❌ Sheet '{sheet_name}' not found in loaded data")
                 return None
-            
-            print(f"🔍 Analyzing Feature identification in sheet: '{sheet_name}'")
-            
-            # Load the actual data (not just headers) to analyze Feature type
+
             xls = pd.ExcelFile(self.excel_file)
-            df = pd.read_excel(xls, sheet_name=sheet_name)
             
-            print(f"   📊 Loaded DataFrame with {len(df)} rows and columns: {list(df.columns)}")
+            # First, read just a few rows to find the Feature identification column
+            df_sample = pd.read_excel(xls, sheet_name=sheet_name, header=None, nrows=5)
             
-            # Find the Feature identification column
-            feature_type_col = None
-            for col in df.columns:
-                col_str = str(col).lower()
-                if 'feature identification' in col_str or 'featureidentification' in col_str:
-                    feature_type_col = col
-                    print(f"   ✅ Found Feature identification column: '{col}'")
-                    break
-            
-            if feature_type_col is None:
-                print(f"⚠️ No Feature identification column found in sheet '{sheet_name}'")
-                print(f"   Available columns: {list(df.columns)}")
+            # Use the same logic as extract_headers to find the correct header row
+            if len(df_sample) < 2: 
                 return None
             
-            # Get unique feature types (case-insensitive)
-            feature_types = df[feature_type_col].astype(str).str.strip().str.upper().dropna().unique()
+            first_row  = df_sample.iloc[0].fillna("").tolist()
+            second_row = df_sample.iloc[1].fillna("").tolist()
             
-            print(f"   📋 Raw Feature identification values: {list(feature_types)}")
+            # Find Feature identification column in the correct header row
+            feature_type_col_idx  = None
+            feature_type_col_name = None
+            
+            # Check second row first (as per extract_headers logic)
+            for i, val in enumerate(second_row):
+                if str(val).strip() != '':
+                    col_str = str(val).strip().lower()
+                    if 'feature identification' in col_str or 'featureidentification' in col_str:
+                        feature_type_col_idx = i
+                        feature_type_col_name = str(val).strip()
+                        break
+            
+            if feature_type_col_idx is None:
+                return None
+            
+            chunk_size              = 1000                              # Process 1000 rows at a time
+            feature_types           = set()                             # Use set for efficient deduplication
+            target_features_found   = set()
+            target_features = ['CRACK', 'CRAL', 'COCL', 'CORR', 'LAMI', 'MAIN'] # Define target feature types
+            
+            try:
+                # Read Excel in chunks
+                for chunk_start in range(0, 1000, chunk_size):          # Limit to 1000 rows max
+                    df_chunk = pd.read_excel(xls, sheet_name=sheet_name, header=None, skiprows=chunk_start, nrows=chunk_size)
+                    
+                    if len(df_chunk) == 0:
+                        break  # No more data
+
+                    start_row = 2 if chunk_start == 0 else 0            # Skip header rows in first chunk
+
+                    if feature_type_col_idx < len(df_chunk.columns):    # Extract values from the Feature identification column
+                        values = df_chunk.iloc[start_row:, feature_type_col_idx].dropna()
+                        values = values.astype(str).str.strip().str.upper()
+                       
+                        feature_types.update(values.unique())           # Add all unique values to feature_types
+
+                        for target in target_features:                  # Check for target features
+                            if target in values.values:
+                                target_features_found.add(target)
+                        
+                        if len(target_features_found) >= 2:             # Found both height and depth features
+                            break
+
+                feature_types = list(feature_types)                     # Convert set to list
+
+            except Exception as e:
+                df_simple = pd.read_excel(xls, sheet_name=sheet_name, header=None, nrows=100)
+                feature_types = []
+                
+                for row_idx in range(2, len(df_simple)):
+                    if feature_type_col_idx < len(df_simple.iloc[row_idx]):
+                        val = df_simple.iloc[row_idx, feature_type_col_idx]
+                        if pd.notna(val) and str(val).strip() != '':
+                            feature_types.append(str(val).strip().upper())
+
+                feature_types = list(set(feature_types))
             
             # Determine which Max columns should be shown (show only one type)
-            height_features = ['CRAL', 'CRACK']
-            depth_features = ['COCL', 'CORR', 'LAMI']
+            height_features = self.FEATURE_TYPE_CONFIG['height_features']
+            depth_features  = self.FEATURE_TYPE_CONFIG['depth_features']
             
             has_height_features = any(ft in height_features for ft in feature_types)
-            has_depth_features = any(ft in depth_features for ft in feature_types)
-            
-            # Priority: If both types exist, prefer Height features (CRACK/CRAL)
-            if has_height_features and has_depth_features:
-                has_height_features = True
-                has_depth_features = False
-                print(f"   ⚠️ Both Height and Depth features detected, showing Height only (CRACK/CRAL priority)")
-            
-            print(f"📊 Sheet '{sheet_name}' Feature types: {list(feature_types)}")
-            print(f"   Height features (CRACK/CRAL): {has_height_features}")
-            print(f"   Depth features (COCL/CORR/LAMI): {has_depth_features}")
-            
+            has_depth_features  = any(ft in depth_features for ft in feature_types)
+
             result = {
-                'feature_types': list(feature_types),
+                'feature_types': feature_types,
                 'show_max_height': has_height_features,
                 'show_max_depth': has_depth_features
             }
             
-            print(f"   🎯 Analysis result: {result}")
             return result
             
         except Exception as e:
@@ -2384,8 +2423,6 @@ The saved configurations have been automatically applied.
             excel_unit = 'mi'
         elif '[ft]' in log_distance_excel:
             excel_unit = 'ft'
-        elif '[m]' in log_distance_excel:
-            excel_unit = 'm'
         
         if not excel_unit:
             return base_headers
@@ -2396,13 +2433,8 @@ The saved configurations have been automatically applied.
             if 'log distance' in header.lower():
                 if excel_unit == 'mi':
                     adjusted_headers.append("Log distance [mi]")
-                    print(f"   🔄 Adjusted Log distance header to [mi] to match Excel")
                 elif excel_unit == 'ft':
                     adjusted_headers.append("Log distance [ft]")
-                    print(f"   🔄 Adjusted Log distance header to [ft] to match Excel")
-                elif excel_unit == 'm':
-                    adjusted_headers.append("Log distance (ft)")  # Convert meters to feet
-                    print(f"   🔄 Adjusted Log distance header to (ft) for meters input")
             else:
                 adjusted_headers.append(header)
         

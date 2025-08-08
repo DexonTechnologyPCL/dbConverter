@@ -24,6 +24,13 @@ UNIT_CONVERSION_FACTORS = {
     'psi_to_bar': 0.0689476  # psi to bar
 }
 
+# Feature type configuration - integrated directly into the file
+FEATURE_TYPE_CONFIG = {
+    'height_features': ['CRAL', 'CRACK'],
+    'depth_features': ['COCL', 'CORR', 'LAMI'],
+    'priority': 'height'  # If both types exist, prefer height features
+}
+
 def create_empty_accdb(file_path):
     """Create an empty .accdb file using JET/ACE engine via ctypes"""
     try:
@@ -254,10 +261,14 @@ def clean_column_name(column_name):
 def get_access_data_type(df_column, column_name=None, table_name=None):
     """ Assign appropriate data types for columns in Access"""
     
-    # Specify specific Data Type for the required columns and tables - only Log distance (m) in List of Pipe Tally.
-    if table_name == "List of Pipe Tally" and column_name == "Log distance (m)":
-        return "DOUBLE"
-
+    # For List of Pipe Tally: Log distance as DOUBLE, all others as TEXT
+    if table_name == "List of Pipe Tally":
+        if column_name and "Log distance" in column_name:
+            return "DOUBLE"
+        else:
+            return "TEXT(255)"
+    
+    # For other tables: use original logic
     if pd.api.types.is_float_dtype(df_column):
         return "DOUBLE"
     elif pd.api.types.is_integer_dtype(df_column):
@@ -324,7 +335,7 @@ def create_access_table(cursor, table_name, df):
             columns = []
             for col in df.columns:
                 clean_col = column_map[col]
-                if table_name == "List of Pipe Tally" and col == "Log distance (m)":
+                if table_name == "List of Pipe Tally" and "Log distance" in col:
                     columns.append(f"[{clean_col}] DOUBLE")
                 else:
                     columns.append(f"[{clean_col}] TEXT(255)")
@@ -408,7 +419,8 @@ def convert_value_to_imperial(value, factor_key):
         numeric_value   = float(value)
         factor          = UNIT_CONVERSION_FACTORS[factor_key]
         converted_value = numeric_value * factor
-        return converted_value  # ไม่มีการ round
+        return converted_value
+
     except (ValueError, TypeError, KeyError):
         return value
 
@@ -430,8 +442,6 @@ def handle_max_columns_by_feature_type(df, use_imperial=False):
             df[col] = pd.to_numeric(df[col], errors='coerce')
         return df
     
-    print(f"🔄 Processing Max columns based on Feature type: {feature_type_col}")
-    
     # Get Max columns
     max_height_cols = [col for col in df.columns if 'max' in col.lower() and 'height' in col.lower()]
     max_depth_cols = [col for col in df.columns if 'max' in col.lower() and 'depth' in col.lower()]
@@ -440,27 +450,23 @@ def handle_max_columns_by_feature_type(df, use_imperial=False):
     df[feature_type_col] = df[feature_type_col].astype(str).str.strip().str.upper()
     
     # Create masks for different feature types
-    height_features = ['CRAL', 'CRACK']
-    depth_features = ['COCL', 'CORR', 'LAMI']
+    height_features = FEATURE_TYPE_CONFIG['height_features']
+    depth_features  = FEATURE_TYPE_CONFIG['depth_features']
     
     height_mask = df[feature_type_col].isin(height_features)
-    depth_mask = df[feature_type_col].isin(depth_features)
+    depth_mask  = df[feature_type_col].isin(depth_features)
     
     # Process Max. Height columns
     for col in max_height_cols:
         if col in df.columns:
-            # Convert to numeric first
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-            # Set to None for depth features
-            df.loc[depth_mask, col] = None
+            df[col] = pd.to_numeric(df[col], errors='coerce')   # Convert to numeric first
+            df.loc[depth_mask, col] = None                      # Set to None for depth features
     
     # Process Max. Depth columns  
     for col in max_depth_cols:
         if col in df.columns:
-            # Convert to numeric first
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-            # Set to None for height features
-            df.loc[height_mask, col] = None
+            df[col] = pd.to_numeric(df[col], errors='coerce')   # Convert to numeric first
+            df.loc[height_mask, col] = None                     # Set to None for height features
     
     # Process other feature types (keep both columns)
     other_mask = ~(height_mask | depth_mask)
@@ -475,191 +481,15 @@ def handle_max_columns_by_feature_type(df, use_imperial=False):
     
     return df
 
-def handle_max_columns_imperial_conversion(df):
-    """Handle Imperial conversion for Max columns using vectorized operations"""
-    converted_count = 0
-    
-    # Check if Feature type column exists
-    feature_type_col = None
-    for col in df.columns:
-        if 'Feature identification' in col.lower() or 'Feature iden' in col.lower():
-            feature_type_col = col
-            break
-    
-    if feature_type_col is None:
-        print("⚠️ Feature type column not found for Max column conversion")
-        return converted_count
-    
-    # Get Max columns
-    max_height_cols = [col for col in df.columns if 'max' in col.lower() and 'height' in col.lower()]
-    max_depth_cols = [col for col in df.columns if 'max' in col.lower() and 'depth' in col.lower()]
-    
-    # Convert Feature type to uppercase for comparison
-    df[feature_type_col] = df[feature_type_col].astype(str).str.strip().str.upper()
-    
-    # Create masks for different feature types
-    height_features = ['CRAL', 'CRACK']
-    depth_features = ['COCL', 'CORR', 'LAMI']
-    
-    height_mask = df[feature_type_col].isin(height_features)
-    depth_mask = df[feature_type_col].isin(depth_features)
-    
-    print(f"🔄 Converting Max columns to Imperial based on Feature type")
-    
-    # Convert Max. Height for CRACK features (mm to in)
-    for col in max_height_cols:
-        if col in df.columns:
-            # Convert only height features
-            mask = height_mask & df[col].notna()
-            if mask.any():
-                df.loc[mask, col] = df.loc[mask, col].apply(lambda x: convert_value_to_imperial(x, 'mm_to_in'))
-                converted_count += mask.sum()
-    
-    # Convert Max. Depth for COCL, CORR, LAMI features (mm to in)
-    for col in max_depth_cols:
-        if col in df.columns:
-            # Convert only depth features
-            mask = depth_mask & df[col].notna()
-            if mask.any():
-                df.loc[mask, col] = df.loc[mask, col].apply(lambda x: convert_value_to_imperial(x, 'mm_to_in'))
-                converted_count += mask.sum()
-    
-    # Convert both columns for other feature types
-    other_mask = ~(height_mask | depth_mask)
-    for col in max_height_cols + max_depth_cols:
-        if col in df.columns:
-            mask = other_mask & df[col].notna()
-            if mask.any():
-                df.loc[mask, col] = df.loc[mask, col].apply(lambda x: convert_value_to_imperial(x, 'mm_to_in'))
-                converted_count += mask.sum()
-    
-    return converted_count
-
-def detect_unit_pattern(column_name):
-    """Dynamically detect unit patterns in column names"""
-    patterns = {
-        # Distance patterns - keep original unit for Log distance
-        r'Log distance\s*[\[\(]mi[\]\)]': ('Log distance [mi]', 'mi_to_mi'),  # Keep miles as miles
-        r'Log distance\s*[\[\(]ft[\]\)]': ('Log distance [ft]', 'ft_to_ft'),  # Keep feet as feet
-        r'Log distance\s*[\[\(]m[\]\)]': ('Log distance (ft)', 'm_to_ft'),    # Convert meters to feet
-        r'Altitude\s*[\[\(]m[\]\)]': ('Altitude (ft)', 'm_to_ft'),
-        r'Joint\s*/\s*component\s*length\s*[\[\(]m[\]\)]': ('Joint / component length (ft)', 'm_to_ft'),
-        r'Abs\.?\s*Dist\.?\s*to\s*upstream\s*weld\s*[\[\(]m[\]\)]': ('Abs. Dist. to upstream weld (ft)', 'm_to_ft'),
-        
-        # Dimension patterns
-        r'(?:Nominal\s+)?(?:Internal\s+)?diameter\s*[\[\(]mm[\]\)]': ('Nominal internal diameter (in)', 'mm_to_in'),
-        r'(?:Nominal\s+)?thickness\s*[\[\(]mm[\]\)]': ('Nominal thickness (in)', 'mm_to_in'),
-        r'Measure/Reference\s+thickness\s*[\[\(]mm[\]\)]': ('Measure/Reference thickness (in)', 'mm_to_in'),
-        r'Remaining\s+thickness\s*[\[\(]mm[\]\)]': ('Remaining thickness (in)', 'mm_to_in'),
-        r'Length\s*[\[\(]mm[\]\)]': ('Length (in)', 'mm_to_in'),
-        r'Width\s*[\[\(]mm[\]\)]': ('Width (in)', 'mm_to_in'),
-        
-        # Max patterns
-        r'Max\.\s*depth\s*[\[\(]mm[\]\)]': ('Max. depth (in)', 'mm_to_in'),
-        r'Max\.\s*Height\s*[\[\(]mm[\]\)]': ('Max. Height (in)', 'mm_to_in'),
-    }
-    
-    for pattern, (target_name, conversion_factor) in patterns.items():
-        if re.search(pattern, column_name, re.IGNORECASE):
-            return target_name, conversion_factor
-    
-    return None, None
-
-def convert_column_name_to_imperial(column_name):
-    """Convert SI column name to Imperial using pattern matching"""
-    target_name, conversion_factor = detect_unit_pattern(column_name)
-    return target_name if target_name else column_name
-
-def get_conversion_factor_for_column(column_name):
-    """Get conversion factor for a column using pattern matching"""
-    target_name, conversion_factor = detect_unit_pattern(column_name)
-    return conversion_factor
-
-def convert_dataframe_columns_to_imperial(df):
-    """Convert DataFrame column names to Imperial using dynamic pattern matching"""
-    column_mapping = {}
-    
-    for col in df.columns:
-        imperial_col = convert_column_name_to_imperial(col)
-        if imperial_col != col:
-            column_mapping[col] = imperial_col
-    
-    # Rename columns
-    if column_mapping:
-        df = df.rename(columns=column_mapping)
-        print(f"🔄 Renamed {len(column_mapping)} columns to Imperial units")
-    
-    return df
-
-def convert_dataframe_values_to_imperial(df):
-    """Convert DataFrame values to Imperial using dynamic pattern matching"""
-    converted_count = 0
-    
-    for col in df.columns:
-        conversion_factor = get_conversion_factor_for_column(col)
-        if conversion_factor and conversion_factor in UNIT_CONVERSION_FACTORS:
-            factor = UNIT_CONVERSION_FACTORS[conversion_factor]
-            
-            # Convert numeric values
-            if df[col].dtype in ['float64', 'int64'] or df[col].dtype == 'object':
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-                df[col] = df[col] * factor
-                converted_count += 1
-                print(f"🔄 Converted {col}: {conversion_factor} (factor: {factor})")
-    
-    # Handle Max columns with special logic
-    max_converted = handle_max_columns_imperial_conversion(df)
-    converted_count += max_converted
-    
-    if converted_count > 0:
-        print(f"🔄 Converted values in {converted_count} columns to Imperial units")
-    
-    return df
-
 def convert_data_types(df, use_imperial=False):
     """Convert data types and handle unit conversions using dynamic pattern matching"""
     
-    # Apply unit conversion if enabled
-    if use_imperial:
-        print("🔄 Unit conversion enabled - converting to Imperial units")
-        df = convert_dataframe_columns_to_imperial(df)
-        df = convert_dataframe_values_to_imperial(df)
-    
+    for col in df.columns:
+        if "Log distance" in col or "distance" in col.lower():
+            print(f"  - {col}: {df[col].dtype}")
+
     # Handle Max columns based on Feature type
     df = handle_max_columns_by_feature_type(df, use_imperial)
-    
-    # Convert numeric columns using dynamic detection
-    numeric_columns = []
-    
-    for col in df.columns:
-        # Distance and dimension columns
-        if any(pattern in col.lower() for pattern in ['distance', 'altitude', 'length', 'width', 'thickness', 'diameter']):
-            numeric_columns.append(col)
-        # Coordinate columns
-        elif any(pattern in col.lower() for pattern in ['latitude', 'longitude']):
-            numeric_columns.append(col)
-        # Max columns
-        elif any(pattern in col.lower() for pattern in ['max. depth', 'max. height']):
-            numeric_columns.append(col)
-        # Other numeric columns
-        elif col in ['ERF', 'SMYS (psi)', 'Design Pressure (psi)', 'MAOP (psi)']:
-            numeric_columns.append(col)
-    
-    # Convert numeric columns
-    for col in numeric_columns:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-    
-    # Convert percentage columns to decimal
-    percentage_columns = [col for col in df.columns if '%' in col]
-    for col in percentage_columns:
-        if col in df.columns:
-            df[col] = df[col] / 100.0
-    
-    # Convert other columns to string
-    for col in df.columns:
-        if col not in numeric_columns and col not in percentage_columns:
-            df[col] = df[col].astype(str).replace({'nan': None, 'None': None, '': None}).where(pd.notnull(df[col]), None)
  
     return df
 
