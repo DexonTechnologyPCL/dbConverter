@@ -527,16 +527,50 @@ def add_erf_type(df):
         df['isNormalERF'] = True
     return df
 
-def create_new_tables(cursor):
+def detect_log_distance_unit(all_sheets_headers):
+    """Detect the unit of 'Log distance' based on headers from List of Pipe Tally"""
+    for sheet_name, headers in all_sheets_headers.items():
+        if "List of Pipe Tally" in sheet_name:
+            for header in headers:
+                if 'log distance' in header.lower():
+                    if '(m)' in header or '[m]' in header:
+                        print(f"📏 Detected Log distance unit from Pipe Tally: m")
+                        return 'm'
+                    elif '(ft)' in header or '[ft]' in header:
+                        print(f"📏 Detected Log distance unit from Pipe Tally: ft")
+                        return 'ft'
+                    elif '(mi)' in header or '[mi]' in header:
+                        print(f"📏 Detected Log distance unit from Pipe Tally: mi")
+                        return 'mi'
+    return None
+
+def create_new_tables(cursor, all_sheets_headers=None, use_imperial=False):
     """Create 4 new tables that do not exist in Excel"""
+
+    # Set the units as detected or use the default
+    unit = detect_log_distance_unit(all_sheets_headers) if all_sheets_headers else None
+
+    if not unit:
+        unit = 'ft' if use_imperial else 'm'
+        print(f"⚠️ Using default unit: {unit}")
+
+    # Map Velocity Units
+    velocity_units = {
+        'm' : ('m/min', 'm/sec'),
+        'ft': ('ft/min', 'ft/sec'),
+        'mi': ('ft/min', 'ft/sec')
+    }
+    vel_min, vel_sec = velocity_units.get(unit, ('m/min', 'm/sec'))
+
     # Create table Velocity
     try:
-        cursor.execute("""CREATE TABLE [Velocity] (
-                                        [Log distance (m)] DOUBLE,
-                                        [Velocity (m/min)] DOUBLE,
-                                        [Velocity (m/sec)] DOUBLE,
-                                        [Feature] TEXT(255))
-                                        """)
+        sql_velocity = f"""CREATE TABLE [Velocity] (
+                        [Log distance ({unit})] DOUBLE,
+                        [Velocity ({vel_min})] DOUBLE,
+                        [Velocity ({vel_sec})] DOUBLE,
+                        [Feature] TEXT(255))"""
+        
+        cursor.execute(sql_velocity)
         cursor.commit()
         print("Successfully created table Velocity")
     except Exception as e:
@@ -729,6 +763,7 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
     check_List_Nominal = False
     pipeTallyColumns = []  
     nomThickColumns = []
+    all_sheets_headers = {}
     
     # Use selected_headers if provided, otherwise use header_file, otherwise use default values
     if selected_headers:
@@ -792,6 +827,8 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
             
             df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
             df = set_specific_headers(df, sheet_name)
+
+            all_sheets_headers[sheet_name] = list(df.columns)
 
             # Check sheet processing mode
             sheet_mode = "individual"  # default
@@ -880,7 +917,7 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
             progress = int((i / total_sheets) * 100)
             print(f"PROGRESS:{progress}", flush=True)
        
-        create_new_tables(cursor)
+        create_new_tables(cursor, all_sheets_headers, use_imperial)
 
         if header_mapping_content:
             add_header_mapping_to_access(cursor, header_mapping_content)
