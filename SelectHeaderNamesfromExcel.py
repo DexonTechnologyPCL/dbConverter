@@ -39,6 +39,7 @@ class HeaderSelector:
         self.sheet_selected_headers = {}                       # Store selected headers of all sheets
        
         self.use_imperial_units = tk.BooleanVar(value=False)   # Unit system variables (Default to SI units)
+        self.unit_system_locked = False
         self.standard_headers = self.Set_standard_headers()    # Initialize standard headers after unit system variable is created
         
         # Mapping file variables
@@ -403,6 +404,27 @@ class HeaderSelector:
         title_label = ttk.Label(header_frame, text="Header Selector Tool", font=("Arial", 14, "bold"))
         title_label.pack()
 
+    def lock_unit_system(self):
+        """Lock unit selection if Excel file is loaded"""
+        if self.excel_file and not self.unit_system_locked:
+            self.unit_system_locked = True
+            self.si_radio.config(state="disabled")
+            self.imperial_radio.config(state="disabled")
+        
+            unit = "Imperial" if self.use_imperial_units.get() else "SI"
+            self.unit_status_label.config(text=f"📏 {unit} Units", foreground="red")
+            print(f"🔒 Unit system locked to: {unit}")
+
+    def unlock_unit_system(self):
+        """Unlock unit system when loading new file"""
+        if self.unit_system_locked:
+            self.unit_system_locked = False
+            self.si_radio.config(state="normal")
+            self.imperial_radio.config(state="normal")
+        
+            unit = "Imperial" if self.use_imperial_units.get() else "SI"
+            self.unit_status_label.config(text=f"📏 {unit} Units selected", foreground="green" if self.use_imperial_units.get() else "blue")
+
     def create_file_section(self):
         """Create the file selection section"""
         file_frame = ttk.LabelFrame(self.root, text="Select Excel File")
@@ -446,14 +468,17 @@ class HeaderSelector:
         # Unit system radio buttons
         unit_frame = ttk.Frame(unit_row)
         unit_frame.pack(side="left", padx=(10, 0))
-        
-        ttk.Radiobutton(unit_frame, text="SI Units", variable=self.use_imperial_units, value=False).pack(side="left", padx=(0, 10))
-        ttk.Radiobutton(unit_frame, text="Imperial Units", variable=self.use_imperial_units, value=True).pack(side="left")
-        
+
+        self.si_radio = ttk.Radiobutton(unit_frame, text="SI Units", variable=self.use_imperial_units, value=False, command=self.lock_unit_system)
+        self.si_radio.pack(side="left", padx=(0, 10))
+
+        self.imperial_radio = ttk.Radiobutton(unit_frame, text="Imperial Units", variable=self.use_imperial_units, value=True, command=self.lock_unit_system)
+        self.imperial_radio.pack(side="left")
+
         # Unit status label
         self.unit_status_label = ttk.Label(unit_row, text="📏 SI Units selected", foreground="blue", font=("Arial", 8))
         self.unit_status_label.pack(side="right")
-        
+
         # Bind unit change event
         self.use_imperial_units.trace('w', self.on_unit_system_changed)
 
@@ -1539,6 +1564,9 @@ You can switch between sheets to see the saved configurations.
         file_path = filedialog.askopenfilename(title="Select Excel File", filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")])
         
         if file_path:
+            if file_path != self.excel_file:
+                self.unlock_unit_system()
+
             self.excel_file = file_path
             filename = os.path.basename(file_path)
             self.file_label.config(text=f"📁 {filename}", foreground="black")
@@ -1708,6 +1736,9 @@ The saved configurations have been automatically applied.
 
     def on_sheet_selected(self, event=None):
         """Called when selecting sheet from dropdown"""
+        if not self.unit_system_locked and self.excel_file:
+            self.lock_unit_system()
+
         # Save mapping of the previous sheet first (if any)
         if self.selected_sheet and self.selected_sheet in self.all_sheets_data:
             self.save_current_sheet_mapping()
@@ -1928,7 +1959,7 @@ The saved configurations have been automatically applied.
         unconfigured_count = len(self.all_sheets_data) - configured_count
         
         # Get unit system info
-        unit_system = "Imperial Units" if self.use_imperial_units.get() else "SI Units"
+        unit_system = "Imperial (Locked)" if self.use_imperial_units.get() else "SI (Locked)"
         
         # Confirm conversion
         result = messagebox.askyesno(
