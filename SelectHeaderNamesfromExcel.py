@@ -13,6 +13,7 @@ import subprocess
 import platform
 import glob
 import configparser
+import numbers
 
 class HeaderSelector:
     # Feature type configuration - integrated directly into the class
@@ -260,28 +261,39 @@ class HeaderSelector:
         else:
             print("ℹ️ User chose to close dialog without opening location")
 
-    def extract_headers(self, df):
-        """Extract headers from DataFrame"""
-        if len(df) < 2: 
+    def extract_headers(self, df, sheet_name=None):
+        """Extract headers, detecting whether row 2 is a header or data."""
+        if df.empty:
             return []
-        
+
+        second_values = df.iloc[1].dropna() if len(df) >= 2 else pd.Series(dtype=object)
+        numeric_count = sum(
+            isinstance(value, numbers.Number) and not isinstance(value, bool)
+            for value in second_values
+        )
+        single_header = (
+            len(df) < 2
+            or (
+                numeric_count >= 2
+                and numeric_count / len(second_values) >= 0.3
+            )
+        )
         first_row = df.iloc[0].fillna("").tolist()
-        second_row = df.iloc[1].fillna("").tolist()
-        
+        second_row = [] if single_header else df.iloc[1].fillna("").tolist()
+
         headers = []
-        max_cols = max(len(first_row), len(second_row))
-        
+        max_cols = len(first_row)
         for i in range(max_cols):
             second_val = second_row[i] if i < len(second_row) else ""
-            first_val = first_row[i] if i < len(first_row) else ""
-            
+            first_val = first_row[i]
+
             if str(second_val).strip() != '':
                 headers.append(str(second_val).strip())
             elif str(first_val).strip() != '':
                 headers.append(str(first_val).strip())
             else:
                 headers.append(f"Unnamed_{i}")
-        
+
         return headers
 
     def setup_styles(self):
@@ -1284,7 +1296,7 @@ class HeaderSelector:
             for sheet_name in xls.sheet_names:
                 try:
                     df      = pd.read_excel(xls, sheet_name=sheet_name, header=None, nrows=3)
-                    headers = self.extract_headers(df)
+                    headers = self.extract_headers(df, sheet_name)
                     self.all_sheets_data[sheet_name] = headers
                     
                 except Exception as e:
@@ -1407,7 +1419,7 @@ class HeaderSelector:
             for sheet_name in xls.sheet_names:
                 try:
                     df      = pd.read_excel(xls, sheet_name=sheet_name, header=None, nrows=3)
-                    headers = self.extract_headers(df)
+                    headers = self.extract_headers(df, sheet_name)
                     self.all_sheets_data[sheet_name] = headers
                     
                 except Exception as e:
@@ -1641,7 +1653,7 @@ You can switch between sheets to see the saved configurations.
             for sheet_name in xls.sheet_names:
                 try:
                     df = pd.read_excel(xls, sheet_name=sheet_name, header=None, nrows=3)
-                    headers = self.extract_headers(df)
+                    headers = self.extract_headers(df, sheet_name)
                     self.all_sheets_data[sheet_name] = headers
 
                 except Exception as e:

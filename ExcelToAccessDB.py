@@ -156,23 +156,41 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
-def set_specific_headers(df, sheetname):
-    """Set column headers from the first and second rows of the sheet."""
-    df = df.copy()
-    
-    # Extract the first two rows which may contain header information
-    first_row   = df.iloc[0].ffill().tolist()
-    second_row  = df.iloc[1].ffill().tolist()
+def get_header_row_count(df):
+    """Detect whether the second row is data or a continuation of the header."""
+    if df.empty or len(df) < 2:
+        return 1
 
-    # Combine the rows to create the headers
+    second_row = df.iloc[1].dropna()
+    if second_row.empty:
+        return 2
+
+    numeric_count = sum(
+        isinstance(value, (int, float, np.number)) and not isinstance(value, (bool, np.bool_))
+        for value in second_row
+    )
+    # A row with multiple numeric values is likely the first data row, not a
+    # second header row. This keeps the decision independent of worksheet names.
+    return 1 if numeric_count >= 2 and numeric_count / len(second_row) >= 0.3 else 2
+
+
+def set_specific_headers(df, sheetname):
+    """Set headers and remove header rows while preserving the first data row."""
+    df = df.copy()
+    if df.empty:
+        return df
+
+    header_rows = get_header_row_count(df)
+    first_row = df.iloc[0].ffill().tolist()
+    second_row = df.iloc[1].ffill().tolist() if header_rows == 2 else []
+
     headers = []
-    for i in range(len(second_row)):
-        if pd.notna(second_row[i]) and second_row[i].strip() != '':
-            headers.append(second_row[i].strip())
-        elif pd.notna(first_row[i]) and first_row[i].strip() != '':
-            headers.append(first_row[i].strip())
-        else:
-            headers.append(f"Unnamed_{i}")  # Assign a placeholder for truly empty headers
+    for i in range(len(first_row)):
+        first_value = first_row[i]
+        second_value = second_row[i] if i < len(second_row) else None
+        if pd.notna(second_value) and str(second_value).strip() != '': headers.append(str(second_value).strip())
+        elif pd.notna(first_value) and str(first_value).strip() != '': headers.append(str(first_value).strip())
+        else: headers.append(f"Unnamed_{i}")
 
     # Set the last column name to 'Comments' unless it's the 'List of Nominal Wall Thickness' sheet.
     if sheetname != "List of Nominal Wall Thickness":
@@ -197,7 +215,7 @@ def set_specific_headers(df, sheetname):
             unique_headers.append(header_str)
 
     df.columns = unique_headers
-    df = df.drop([0, 1]).reset_index(drop=True)   # Drop the first two rows after setting headers and reset index
+    df = df.iloc[header_rows:].reset_index(drop=True)
     return df
 
 def GetHeaderColumn(df):
