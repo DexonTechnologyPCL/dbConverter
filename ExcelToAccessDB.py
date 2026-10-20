@@ -9,6 +9,27 @@ import subprocess
 import ctypes
 from ctypes import wintypes
 
+# Unit conversion factors
+UNIT_CONVERSION_FACTORS = {
+    'm_to_ft': 3.28084,      # meters to feet
+    'm_to_mi': 0.000621371,  # meters to miles
+    'ft_to_mi': 0.000189394, # feet to miles
+    'mi_to_ft': 5280.0,      # miles to feet
+    'mi_to_mi': 1.0,         # miles to miles (no conversion)
+    'ft_to_ft': 1.0,         # feet to feet (no conversion)
+    'mm_to_in': 0.0393701,   # millimeters to inches
+    'bar_to_psi': 14.5038,   # bar to psi
+    'ft_to_m': 0.3048,       # feet to meters
+    'in_to_mm': 25.4,        # inches to millimeters
+    'psi_to_bar': 0.0689476  # psi to bar
+}
+
+# Feature type configuration - integrated directly into the file
+FEATURE_TYPE_CONFIG = {
+    'height_features': ['CRAL', 'CRACK'],
+    'depth_features': ['COCL', 'CORR', 'LAMI'],
+    'priority': 'height'  # If both types exist, prefer height features
+}
 
 def create_empty_accdb(file_path):
     """Create an empty .accdb file using JET/ACE engine via ctypes"""
@@ -135,23 +156,41 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
-def set_specific_headers(df, sheetname):
-    """Set column headers from the first and second rows of the sheet."""
-    df = df.copy()
-    
-    # Extract the first two rows which may contain header information
-    first_row   = df.iloc[0].ffill().tolist()
-    second_row  = df.iloc[1].ffill().tolist()
+def get_header_row_count(df):
+    """Detect whether the second row is data or a continuation of the header."""
+    if df.empty or len(df) < 2:
+        return 1
 
-    # Combine the rows to create the headers
+    second_row = df.iloc[1].dropna()
+    if second_row.empty:
+        return 2
+
+    numeric_count = sum(
+        isinstance(value, (int, float, np.number)) and not isinstance(value, (bool, np.bool_))
+        for value in second_row
+    )
+    # A row with multiple numeric values is likely the first data row, not a
+    # second header row. This keeps the decision independent of worksheet names.
+    return 1 if numeric_count >= 2 and numeric_count / len(second_row) >= 0.3 else 2
+
+
+def set_specific_headers(df, sheetname):
+    """Set headers and remove header rows while preserving the first data row."""
+    df = df.copy()
+    if df.empty:
+        return df
+
+    header_rows = get_header_row_count(df)
+    first_row = df.iloc[0].ffill().tolist()
+    second_row = df.iloc[1].ffill().tolist() if header_rows == 2 else []
+
     headers = []
-    for i in range(len(second_row)):
-        if pd.notna(second_row[i]) and second_row[i].strip() != '':
-            headers.append(second_row[i].strip())
-        elif pd.notna(first_row[i]) and first_row[i].strip() != '':
-            headers.append(first_row[i].strip())
-        else:
-            headers.append(f"Unnamed_{i}")  # Assign a placeholder for truly empty headers
+    for i in range(len(first_row)):
+        first_value = first_row[i]
+        second_value = second_row[i] if i < len(second_row) else None
+        if pd.notna(second_value) and str(second_value).strip() != '': headers.append(str(second_value).strip())
+        elif pd.notna(first_value) and str(first_value).strip() != '': headers.append(str(first_value).strip())
+        else: headers.append(f"Unnamed_{i}")
 
     # Set the last column name to 'Comments' unless it's the 'List of Nominal Wall Thickness' sheet.
     if sheetname != "List of Nominal Wall Thickness":
@@ -176,36 +215,8 @@ def set_specific_headers(df, sheetname):
             unique_headers.append(header_str)
 
     df.columns = unique_headers
-    df = df.drop([0, 1]).reset_index(drop=True)   # Drop the first two rows after setting headers and reset index
+    df = df.iloc[header_rows:].reset_index(drop=True)
     return df
-
-def custom_round(x):
-    """Custom rounding function: round down at 0.49 and up at 0.5."""
-    if pd.isna(x):
-        return pd.NA
-    return round(x)
-
-def custom_round_max_depth(x):
-    if pd.isna(x):
-        return None
-    try:
-        float_x = float(x)
-        # Round only if the value has more than 1 decimal place
-        if abs(float_x - round(float_x, 1)) > 0.00001:
-            return str(round(float_x))
-        else:
-            return str(float_x) # Keep original precision for 1 or 0 decimal places
-    except ValueError:
-        return str(x)           # Keep as is if it's not a number
-    
-def custom_round_two_decimal(x):
-    """Custom rounding function to two decimal places."""
-    if pd.isna(x):
-        return pd.NA
-    rounded = round(x * 100) / 100
-    if round(x, 3) - rounded >= 0.001:
-        rounded += 0.01
-    return round(rounded, 2)
 
 def GetHeaderColumn(df):
     headers = df.iloc[0].tolist()       # Create a list for new headers
@@ -268,10 +279,14 @@ def clean_column_name(column_name):
 def get_access_data_type(df_column, column_name=None, table_name=None):
     """ Assign appropriate data types for columns in Access"""
     
-    # Specify specific Data Type for the required columns and tables - only Log distance (m) in List of Pipe Tally.
-    if table_name == "List of Pipe Tally" and column_name == "Log distance (m)":
-        return "DOUBLE"
-
+    # For List of Pipe Tally: Log distance as DOUBLE, all others as TEXT
+    if table_name == "List of Pipe Tally":
+        if column_name and "Log distance" in column_name:
+            return "DOUBLE"
+        else:
+            return "TEXT(255)"
+    
+    # For other tables: use original logic
     if pd.api.types.is_float_dtype(df_column):
         return "DOUBLE"
     elif pd.api.types.is_integer_dtype(df_column):
@@ -338,7 +353,7 @@ def create_access_table(cursor, table_name, df):
             columns = []
             for col in df.columns:
                 clean_col = column_map[col]
-                if table_name == "List of Pipe Tally" and col == "Log distance (m)":
+                if table_name == "List of Pipe Tally" and "Log distance" in col:
                     columns.append(f"[{clean_col}] DOUBLE")
                 else:
                     columns.append(f"[{clean_col}] TEXT(255)")
@@ -413,45 +428,86 @@ def create_access_database(file_path):
     # Use the ctypes implementation to create the database
     return create_empty_accdb(file_path)
 
-def convert_data_types(df):
-    """Convert data types of specific columns."""
+def convert_value_to_imperial(value, factor_key):
+    """Convert a single value to Imperial units"""
+    if pd.isna(value) or value is None:
+        return value
+    
+    try:
+        numeric_value   = float(value)
+        factor          = UNIT_CONVERSION_FACTORS[factor_key]
+        converted_value = numeric_value * factor
+        return converted_value
+
+    except (ValueError, TypeError, KeyError):
+        return value
+
+def handle_max_columns_by_feature_type(df, use_imperial=False):
+    """Handle Max columns based on Feature type using vectorized operations"""
+    
+    # Check if Feature type column exists
+    feature_type_col = None
+    for col in df.columns:
+        if 'Feature identification' in col.lower() or 'Feature iden' in col.lower():
+            feature_type_col = col
+            break
+    
+    if feature_type_col is None:
+        print("⚠️ Feature type column not found, using default Max column handling")
+        # Default handling - process all Max columns
+        max_columns = [col for col in df.columns if 'max' in col.lower()]
+        for col in max_columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        return df
+    
+    # Get Max columns
+    max_height_cols = [col for col in df.columns if 'max' in col.lower() and 'height' in col.lower()]
+    max_depth_cols = [col for col in df.columns if 'max' in col.lower() and 'depth' in col.lower()]
+    
+    # Convert Feature type to uppercase for comparison
+    df[feature_type_col] = df[feature_type_col].astype(str).str.strip().str.upper()
+    
+    # Create masks for different feature types
+    height_features = FEATURE_TYPE_CONFIG['height_features']
+    depth_features  = FEATURE_TYPE_CONFIG['depth_features']
+    
+    height_mask = df[feature_type_col].isin(height_features)
+    depth_mask  = df[feature_type_col].isin(depth_features)
+    
+    # Process Max. Height columns
+    for col in max_height_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')   # Convert to numeric first
+            df.loc[depth_mask, col] = None                      # Set to None for depth features
+    
+    # Process Max. Depth columns  
+    for col in max_depth_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')   # Convert to numeric first
+            df.loc[height_mask, col] = None                     # Set to None for height features
+    
+    # Process other feature types (keep both columns)
+    other_mask = ~(height_mask | depth_mask)
+    for col in max_height_cols + max_depth_cols:
+        if col in df.columns:
+            df.loc[other_mask, col] = pd.to_numeric(df.loc[other_mask, col], errors='coerce')
+    
+    # Print column types
+    for col in max_height_cols + max_depth_cols:
+        if col in df.columns:
+            print(f"  - {col}: {df[col].dtype}")
+    
+    return df
+
+def convert_data_types(df, use_imperial=False):
+    """Convert data types and handle unit conversions using dynamic pattern matching"""
     
     for col in df.columns:
         if "Log distance" in col or "distance" in col.lower():
             print(f"  - {col}: {df[col].dtype}")
 
-    if "Log distance (m)" in df.columns:
-        df["Log distance (m)"] = pd.to_numeric(df["Log distance (m)"], errors='coerce').round(3)
-    
-    # List of columns to process for three decimal places
-    columns_three_decimal = ["Altitude (m)", "Joint / component length (m)", "Abs. Dist. to upstream weld (m)", "Remaining thickness (mm)"]
-    
-    for col in columns_three_decimal:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').round(3).apply(lambda x: f"{x:.3f}" if pd.notnull(x) else None)
-
-    # List of columns to process for two decimal places
-    columns_two_decimal = ["Nominal Internal diameter (mm)", "Max. depth (mm)"]
-    
-    for col in columns_two_decimal:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round_two_decimal).apply(lambda x: f"{x:.2f}" if pd.notnull(x) else None)
-
-    if "Max. depth (%)" in df.columns:
-        df["Max. depth (%)"] = df["Max. depth (%)"].apply(custom_round_max_depth)
-
-    # Columns that should remain as integers
-    numeric_columns_to_round = ["Length (mm)", "Width (mm)"]
-    for col in numeric_columns_to_round:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').apply(custom_round).apply(lambda x: str(int(x)) if pd.notnull(x) else None)
-    
-    # Convert other columns to string
-    processed_columns = ["Log distance (m)"] + columns_three_decimal + columns_two_decimal + numeric_columns_to_round + ["Max. depth (%)"]
-    
-    for col in df.columns:
-        if col not in processed_columns:
-            df[col] = df[col].astype(str).replace({'nan': None, 'None': None, '': None}).where(pd.notnull(df[col]), None)
+    # Handle Max columns based on Feature type
+    df = handle_max_columns_by_feature_type(df, use_imperial)
  
     return df
 
@@ -489,16 +545,50 @@ def add_erf_type(df):
         df['isNormalERF'] = True
     return df
 
-def create_new_tables(cursor):
+def detect_log_distance_unit(all_sheets_headers):
+    """Detect the unit of 'Log distance' based on headers from List of Pipe Tally"""
+    for sheet_name, headers in all_sheets_headers.items():
+        if "List of Pipe Tally" in sheet_name:
+            for header in headers:
+                if 'log distance' in header.lower():
+                    if '(m)' in header or '[m]' in header:
+                        print(f"📏 Detected Log distance unit from Pipe Tally: m")
+                        return 'm'
+                    elif '(ft)' in header or '[ft]' in header:
+                        print(f"📏 Detected Log distance unit from Pipe Tally: ft")
+                        return 'ft'
+                    elif '(mi)' in header or '[mi]' in header:
+                        print(f"📏 Detected Log distance unit from Pipe Tally: mi")
+                        return 'mi'
+    return None
+
+def create_new_tables(cursor, all_sheets_headers=None, use_imperial=False):
     """Create 4 new tables that do not exist in Excel"""
+
+    # Set the units as detected or use the default
+    unit = detect_log_distance_unit(all_sheets_headers) if all_sheets_headers else None
+
+    if not unit:
+        unit = 'ft' if use_imperial else 'm'
+        print(f"⚠️ Using default unit: {unit}")
+
+    # Map Velocity Units
+    velocity_units = {
+        'm' : ('m/min', 'm/sec'),
+        'ft': ('ft/min', 'ft/sec'),
+        'mi': ('ft/min', 'ft/sec')
+    }
+    vel_min, vel_sec = velocity_units.get(unit, ('m/min', 'm/sec'))
+
     # Create table Velocity
     try:
-        cursor.execute("""CREATE TABLE [Velocity] (
-                                        [Log distance (m)] DOUBLE,
-                                        [Velocity (m/min)] DOUBLE,
-                                        [Velocity (m/sec)] DOUBLE,
-                                        [Feature] TEXT(255))
-                                        """)
+        sql_velocity = f"""CREATE TABLE [Velocity] (
+                        [Log distance ({unit})] DOUBLE,
+                        [Velocity ({vel_min})] DOUBLE,
+                        [Velocity ({vel_sec})] DOUBLE,
+                        [Feature] TEXT(255))"""
+        
+        cursor.execute(sql_velocity)
         cursor.commit()
         print("Successfully created table Velocity")
     except Exception as e:
@@ -686,11 +776,12 @@ def add_header_mapping_to_access(cursor, mapping_content):
         print(f"❌ Error creating HeaderMapping table: {str(e)}")
         return False
 
-def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_modes=None, header_mapping_content=None):
+def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_modes=None, header_mapping_content=None, use_imperial=False):
     check_List_Pipe = False
     check_List_Nominal = False
     pipeTallyColumns = []  
     nomThickColumns = []
+    all_sheets_headers = {}
     
     # Use selected_headers if provided, otherwise use header_file, otherwise use default values
     if selected_headers:
@@ -755,6 +846,8 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
             df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
             df = set_specific_headers(df, sheet_name)
 
+            all_sheets_headers[sheet_name] = list(df.columns)
+
             # Check sheet processing mode
             sheet_mode = "individual"  # default
             sheet_mappings = None
@@ -803,7 +896,7 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
                 if 'isNormalERF' in df.columns:
                     df = df.drop(columns=['isNormalERF'])
         
-                df = convert_data_types(df)
+                df = convert_data_types(df, use_imperial=use_imperial)
 
                 # Check against `pipeTallyColumns` if defined
                 if len(pipeTallyColumns) > 0:
@@ -842,7 +935,7 @@ def excel_to_access(excel_file, header_file=None, selected_headers=None, sheet_m
             progress = int((i / total_sheets) * 100)
             print(f"PROGRESS:{progress}", flush=True)
        
-        create_new_tables(cursor)
+        create_new_tables(cursor, all_sheets_headers, use_imperial)
 
         if header_mapping_content:
             add_header_mapping_to_access(cursor, header_mapping_content)
